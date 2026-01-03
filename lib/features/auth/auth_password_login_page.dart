@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../widgets/app_page.dart';
 import 'auth_otp_request_page.dart';
 
 class AuthPasswordLoginPage extends StatefulWidget {
@@ -25,6 +26,7 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
   }
 
   void _snack(String msg) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
@@ -43,11 +45,13 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
 
     setState(() => _loading = true);
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: email,
-        password: pass,
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'evarkadasi://reset-password',
       );
-      // AuthGate zaten yakalayıp yönlendirecek
+      // AuthGate session'ı görüp yönlendirecek
+    } on AuthException catch (e) {
+      _snack(e.message);
     } catch (e) {
       _snack('Giriş hatası: $e');
     } finally {
@@ -65,11 +69,15 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
 
     setState(() => _loading = true);
     try {
-      // ✅ Supabase reset link gönderir (kod değil)
-      // Deep link sonra ayrıca ayarlanabilir; şimdilik link mailden açılır.
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      // 🔥 ÖNEMLİ: deep link ile uygulamaya dönmesi için
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'evarkadasi://reset-password',
+      );
 
       _snack('Şifre yenileme linki mailine gönderildi ✅');
+    } on AuthException catch (e) {
+      _snack(e.message);
     } catch (e) {
       _snack('Link gönderilemedi: $e');
     } finally {
@@ -77,7 +85,7 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
     }
   }
 
-  void _goOtp() {
+  void _goRegisterWithCode() {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AuthOtpRequestPage()),
@@ -86,12 +94,15 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Giriş')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+    return AppPage(
+      child: SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const SizedBox(height: 12),
+            Text('Giriş', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 16),
+
             TextField(
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
@@ -101,6 +112,7 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
               ),
             ),
             const SizedBox(height: 12),
+
             TextField(
               controller: _passCtrl,
               obscureText: !_showPass,
@@ -109,12 +121,14 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   onPressed: () => setState(() => _showPass = !_showPass),
-                  icon: Icon(_showPass ? Icons.visibility_off : Icons.visibility),
+                  icon: Icon(
+                    _showPass ? Icons.visibility_off : Icons.visibility,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 10),
 
+            const SizedBox(height: 8),
             Row(
               children: [
                 TextButton(
@@ -123,17 +137,16 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
                 ),
                 const Spacer(),
                 TextButton(
-                  onPressed: _loading ? null : _goOtp,
-                  child: const Text('Kod ile giriş'),
+                  onPressed: _loading ? null : _goRegisterWithCode,
+                  child: const Text('Kayıt Ol'),
                 ),
               ],
             ),
 
             const SizedBox(height: 8),
             SizedBox(
-              width: double.infinity,
               height: 48,
-              child: ElevatedButton(
+              child: FilledButton(
                 onPressed: _loading ? null : _login,
                 child: Text(_loading ? 'Giriş yapılıyor...' : 'Giriş Yap'),
               ),

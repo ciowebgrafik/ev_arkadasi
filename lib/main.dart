@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'auth_gate.dart';
+import 'splash_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,9 +21,11 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Ev Arkadaşı',
+      title: 'Ev Arkadaşım',
       theme: ThemeData(useMaterial3: true),
-      home: const AuthGate(),
+
+      // ✅ builder kaldırıldı (Splash dahil her şeyi bozmasın)
+      home: const SplashPage(),
     );
   }
 }

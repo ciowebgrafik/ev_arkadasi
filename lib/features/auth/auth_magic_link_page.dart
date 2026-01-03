@@ -19,10 +19,6 @@ class _AuthMagicLinkPageState extends State<AuthMagicLinkPage> {
 
   final _sb = Supabase.instance.client;
 
-  // ✅ Supabase panelindeki "Email OTP Length" sende 8 görünüyor
-  // Panelde 6 yaparsan burayı da 6 yap.
-  static const int _otpLength = 6;
-
   @override
   void dispose() {
     _emailCtrl.dispose();
@@ -45,15 +41,13 @@ class _AuthMagicLinkPageState extends State<AuthMagicLinkPage> {
 
     setState(() => _loading = true);
     try {
-      // ✅ OTP / Magic link gönderir + redirect ayarlı
-      await _sb.auth.signInWithOtp(
-        email: email,
-          shouldCreateUser: true,
-      );
+      await _sb.auth.signInWithOtp(email: email, shouldCreateUser: true);
 
       if (!mounted) return;
       setState(() => _codeSent = true);
-      _msg('Kod / link gönderildi ✅ Mailini kontrol et.');
+      _msg('Kod gönderildi ✅ Mailini kontrol et.');
+    } on AuthException catch (e) {
+      _msg(e.message);
     } catch (e) {
       _msg('Hata: $e');
     } finally {
@@ -69,27 +63,26 @@ class _AuthMagicLinkPageState extends State<AuthMagicLinkPage> {
       _msg('Email boş olamaz');
       return;
     }
-    if (token.length != _otpLength) {
-      _msg('$_otpLength haneli kodu gir');
+
+    // ✅ OTP uzunluğu panelde 6/8 olabilir → sabit kontrol yapmıyoruz
+    if (token.length < 6) {
+      _msg('Kodu eksik girdin (en az 6 hane)');
       return;
     }
 
     setState(() => _loading = true);
     try {
-      // ✅ Doğru method: verifyOTP
-      await _sb.auth.verifyOTP(
-        email: email,
-        token: token,
-        type: OtpType.email,
-      );
+      await _sb.auth.verifyOTP(email: email, token: token, type: OtpType.email);
 
       if (!mounted) return;
       _msg('Giriş başarılı ✅');
 
-      // ✅ AuthGate session'ı görüp yönlendirir
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AuthGate()),
-      );
+      // ✅ AuthGate session’ı görüp yönlendirecek
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const AuthGate()));
+    } on AuthException catch (e) {
+      _msg('Kod doğrulanamadı: ${e.message}');
     } catch (e) {
       _msg('Kod doğrulanamadı: $e');
     } finally {
@@ -97,10 +90,17 @@ class _AuthMagicLinkPageState extends State<AuthMagicLinkPage> {
     }
   }
 
+  void _resetForResend() {
+    setState(() {
+      _codeSent = false;
+      _codeCtrl.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Giriş / Kayıt (Kod ile)')),
+      appBar: AppBar(title: const Text('Kod ile giriş / Kayıt')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -119,9 +119,9 @@ class _AuthMagicLinkPageState extends State<AuthMagicLinkPage> {
               TextField(
                 controller: _codeCtrl,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: '$_otpLength haneli kod',
-                  border: const OutlineInputBorder(),
+                decoration: const InputDecoration(
+                  labelText: 'Mailine gelen kod',
+                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -143,17 +143,13 @@ class _AuthMagicLinkPageState extends State<AuthMagicLinkPage> {
             ),
 
             const SizedBox(height: 12),
-            TextButton(
-              onPressed: _loading
-                  ? null
-                  : () {
-                setState(() {
-                  _codeSent = false;
-                  _codeCtrl.clear();
-                });
-              },
-              child: const Text('Kod gelmedi / tekrar dene'),
-            ),
+
+            // ✅ Kod gelmedi → tekrar kod gönder moduna dön
+            if (_codeSent)
+              TextButton(
+                onPressed: _loading ? null : _resetForResend,
+                child: const Text('Kod gelmedi / tekrar gönder'),
+              ),
           ],
         ),
       ),

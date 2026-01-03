@@ -1,10 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'auth_password_login_page.dart';
-import 'home_page.dart';
-import 'profil_olustur_sayfasi.dart';
+import '../../home_page.dart';
+import '../profile/profil_olustur_sayfasi.dart';
+import 'auth_page.dart'; // giriş ekranın (şifreyle giriş + kod ile giriş + kayıt)
 import 'sifre_olustur_page.dart';
 
 class AuthGate extends StatefulWidget {
@@ -22,22 +23,40 @@ class _AuthGateState extends State<AuthGate> {
   bool _hasPassword = false;
   String? _error;
 
-  String? _lastCheckedUserId;
-
   StreamSubscription<AuthState>? _sub;
 
   @override
   void initState() {
     super.initState();
 
-    // İlk açılışta kontrol
-    _checkProfile();
+    // ✅ 1) PASSWORD RECOVERY (Şifre sıfırlama linkinden gelen kullanıcıyı yakala)
+    // Maildeki link açılıp app'e dönünce Supabase bu event'i yollar.
+    _sub = supabase.auth.onAuthStateChange.listen((data) async {
+      final event = data.event;
+      final session = data.session;
 
-    // Auth değişikliklerini dinle (login/logout/refresh)
-    _sub = supabase.auth.onAuthStateChange.listen((event) {
-      // Her auth eventinde yeniden kontrol et
-      _checkProfile();
+      // ✅ Şifre sıfırlama linkinden geldiyse direkt şifre oluştur sayfasına git
+      if (event == AuthChangeEvent.passwordRecovery && session != null) {
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => SifreOlusturPage(
+              onPasswordCreated: () async {
+                await _checkProfile();
+              },
+            ),
+          ),
+          (route) => false,
+        );
+        return;
+      }
+
+      // Diğer login/logout değişikliklerinde normal akış
+      await _checkProfile();
     });
+
+    // İlk açılışta da kontrol
+    _checkProfile();
   }
 
   @override
@@ -47,11 +66,18 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   void _resetLocalState() {
-    _lastCheckedUserId = null;
     _hasProfile = false;
     _hasPassword = false;
     _loading = false;
     _error = null;
+  }
+
+  Future<void> _forceSignOutAndGoAuth() async {
+    try {
+      await supabase.auth.signOut();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(_resetLocalState);
   }
 
   Future<void> _checkProfile() async {
@@ -66,14 +92,14 @@ class _AuthGateState extends State<AuthGate> {
       final user = supabase.auth.currentUser;
       final session = supabase.auth.currentSession;
 
-      // Oturum yoksa temizle
+      // Oturum yoksa -> AuthPage
       if (user == null || session == null) {
         if (!mounted) return;
         setState(_resetLocalState);
         return;
       }
 
-      // Aynı user ise bile DB kontrolünü yine yapıyoruz (daha sağlam)
+      // Profil + has_password kontrolü
       final data = await supabase
           .from('profiles')
           .select('id, has_password')
@@ -85,7 +111,17 @@ class _AuthGateState extends State<AuthGate> {
         _hasProfile = data != null;
         _hasPassword = (data?['has_password'] ?? false) == true;
         _loading = false;
-        _lastCheckedUserId = user.id;
+      });
+    } on AuthException catch (e) {
+      // Supabase'de user silindiyse telefonda session kalabiliyor
+      if (e.statusCode == 403 || e.code == 'user_not_found') {
+        await _forceSignOutAndGoAuth();
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _error = 'Auth hatası: ${e.message}';
+        _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
@@ -101,16 +137,14 @@ class _AuthGateState extends State<AuthGate> {
     final session = supabase.auth.currentSession;
     final user = supabase.auth.currentUser;
 
-    // 1) Oturum yok -> Şifre giriş sayfası
+    // 1) Oturum yok -> AuthPage
     if (session == null || user == null) {
-      return const AuthPasswordLoginPage();
+      return const AuthPage();
     }
 
     // 2) Loading
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     // 3) Hata
@@ -125,9 +159,19 @@ class _AuthGateState extends State<AuthGate> {
               children: [
                 Text(_error!, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: _checkProfile,
-                  child: const Text('Tekrar dene'),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _checkProfile,
+                      child: const Text('Tekrar dene'),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      onPressed: _forceSignOutAndGoAuth,
+                      child: const Text('Çıkış yap'),
+                    ),
+                  ],
                 ),
               ],
             ),

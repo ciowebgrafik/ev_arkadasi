@@ -18,9 +18,6 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
   bool _show1 = false;
   bool _show2 = false;
 
-  // Regex yerine: güvenli özel karakter listesi
-  static const String specialChars = r"""!@#$%^&*()+-=[]{};:'",.<>/?\|`~""";
-
   @override
   void dispose() {
     _pass1.dispose();
@@ -29,11 +26,11 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
   }
 
   void _snack(String msg) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   bool _hasSpecial(String s) {
-    // Özel karakter var mı? (tırnak, slash vs sorun çıkarmasın diye böyle yazdım)
     final reg = RegExp(r'''[!@#$%^&*(),.?":{}|<>_\-+=/\\\[\];'`~]''');
     return reg.hasMatch(s);
   }
@@ -75,10 +72,13 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
       await sb.auth.updateUser(UserAttributes(password: p1));
 
       // 2) profiles.has_password = true
-      await sb.from('profiles').update({
-        'has_password': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', user.id);
+      await sb
+          .from('profiles')
+          .update({
+            'has_password': true,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', user.id);
 
       if (!mounted) return;
       _snack('Şifre oluşturuldu ✅');
@@ -116,75 +116,72 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
     final hasDigit = RegExp(r'\d').hasMatch(p);
     final hasSpec = _hasSpecial(p);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Şifre Oluştur')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+    // ✅ Scaffold YOK (AppPage zaten Scaffold veriyor)
+    return ListView(
+      children: [
+        const SizedBox(height: 8),
+        const Text(
+          'Şifre Oluştur',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Bundan sonra email + şifre ile gireceksin. Şifreni unutursan “Şifremi unuttum” ile mailden sıfırlarsın.',
+          textAlign: TextAlign.left,
+        ),
+        const SizedBox(height: 16),
+
+        TextField(
+          controller: _pass1,
+          obscureText: !_show1,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: 'Yeni şifre',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              onPressed: () => setState(() => _show1 = !_show1),
+              icon: Icon(_show1 ? Icons.visibility_off : Icons.visibility),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        TextField(
+          controller: _pass2,
+          obscureText: !_show2,
+          decoration: InputDecoration(
+            labelText: 'Yeni şifre (tekrar)',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              onPressed: () => setState(() => _show2 = !_show2),
+              icon: Icon(_show2 ? Icons.visibility_off : Icons.visibility),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 14),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Bundan sonra email + şifre ile gireceksin.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-
-            TextField(
-              controller: _pass1,
-              obscureText: !_show1,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                labelText: 'Yeni şifre',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _show1 = !_show1),
-                  icon: Icon(_show1 ? Icons.visibility_off : Icons.visibility),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            TextField(
-              controller: _pass2,
-              obscureText: !_show2,
-              decoration: InputDecoration(
-                labelText: 'Yeni şifre (tekrar)',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _show2 = !_show2),
-                  icon: Icon(_show2 ? Icons.visibility_off : Icons.visibility),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _ruleRow(has8, 'En az 8 karakter'),
-                  _ruleRow(hasUpper, '1 büyük harf (A-Z)'),
-                  _ruleRow(hasLower, '1 küçük harf (a-z)'),
-                  _ruleRow(hasDigit, '1 rakam (0-9)'),
-                  _ruleRow(hasSpec, '1 özel karakter (!@#...)'),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _createPassword,
-                child: Text(_loading ? 'Kaydediliyor...' : 'Şifreyi Kaydet'),
-              ),
-            ),
+            _ruleRow(has8, 'En az 8 karakter'),
+            _ruleRow(hasUpper, '1 büyük harf (A-Z)'),
+            _ruleRow(hasLower, '1 küçük harf (a-z)'),
+            _ruleRow(hasDigit, '1 rakam (0-9)'),
+            _ruleRow(hasSpec, '1 özel karakter (!@#...)'),
           ],
         ),
-      ),
+
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton(
+            onPressed: _loading ? null : _createPassword,
+            child: Text(_loading ? 'Kaydediliyor...' : 'Şifreyi Kaydet'),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
     );
   }
 }
