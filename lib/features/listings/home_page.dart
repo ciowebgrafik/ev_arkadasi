@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'features/auth/auth_gate.dart';
-import 'features/profile/profil_sayfasi.dart';
+import '../auth/auth_gate.dart';
+import '../profile/profil_sayfasi.dart';
+// ✅ Favoriler sayfası (dosya yolun farklıysa düzelt)
+import 'favorites_page.dart';
+// ✅ İlan sayfaları
+import 'listing_create_page.dart';
+import 'listing_list_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -88,7 +93,46 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Drawer: İlanlar menüsü (şimdilik placeholder)
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfilSayfasi()),
+    );
+
+    // ✅ Geri dönünce yenile
+    if (!mounted) return;
+    await _loadMe();
+  }
+
+  Future<void> _openListings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ListingListPage()),
+    );
+  }
+
+  Future<void> _openCreateListing() async {
+    final changed = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ListingCreatePage()),
+    );
+
+    if (!mounted) return;
+
+    if (changed == true) {
+      _snack('İlan kaydedildi ✅');
+      await _openListings();
+    }
+  }
+
+  // ✅ Favoriler sayfasını aç
+  Future<void> _openFavorites() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const FavoritesPage()),
+    );
+  }
+
   Drawer _buildDrawer() {
     return Drawer(
       child: SafeArea(
@@ -107,11 +151,19 @@ class _HomePageState extends State<HomePage> {
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text('İlan Ekle'),
+              onTap: () {
+                Navigator.pop(context);
+                Future.microtask(_openCreateListing);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.list_alt_outlined),
               title: const Text('İlanlar'),
               onTap: () {
                 Navigator.pop(context);
-                _notReady('İlanlar');
+                Future.microtask(_openListings);
               },
             ),
             const Spacer(),
@@ -130,48 +182,34 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _openProfile() async {
-    // Profil sayfasına git
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ProfilSayfasi()),
-    );
-
-    // ✅ Geri dönünce: Home’a geldi, yenile
-    if (!mounted) return;
-    await _loadMe();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: _buildDrawer(),
-
-      // ✅ ÜST BAR: sol ilanlar menüsü - orta başlık - sağda mesaj / profil / çıkış
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        centerTitle: true,
-
+        centerTitle: false,
+        titleSpacing: 0,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: Colors.indigo),
         ),
 
+        // ✅ Drawer butonu
         leading: Builder(
           builder: (ctx) => IconButton(
-            tooltip: 'İlanlar',
-            icon: const Icon(
-              Icons.list_alt_outlined,
-              size: 22,
-              color: Colors.black87,
-            ),
+            tooltip: 'Menü',
+            icon: const Icon(Icons.menu, size: 22, color: Colors.black87),
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
 
+        // ✅ Başlık (taşmasın diye ellipsis)
         title: const Text(
-          'Ev arkadaşım',
+          'Ev Arkadaşım',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.black87,
             fontSize: 18,
@@ -179,44 +217,57 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
 
+        // ✅ avatar + 3 nokta menü
         actions: [
-          IconButton(
-            tooltip: 'Mesajlar',
-            icon: const Icon(
-              Icons.chat_bubble_outline,
-              size: 20,
-              color: Colors.black87,
-            ),
-            onPressed: () => _notReady('Mesajlar'),
-          ),
-
-          // 👤 Profil (foto)
           GestureDetector(
             onTap: _openProfile,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
               child: CircleAvatar(
-                radius: 15,
+                radius: 16,
                 backgroundColor: Colors.grey.shade200,
                 backgroundImage: avatarUrl != null
                     ? NetworkImage(avatarUrl!)
                     : null,
                 child: avatarUrl == null
-                    ? const Icon(Icons.person, size: 16, color: Colors.grey)
+                    ? const Icon(Icons.person, size: 18, color: Colors.grey)
                     : null,
               ),
             ),
           ),
 
-          IconButton(
-            tooltip: 'Çıkış',
-            icon: const Icon(Icons.logout, size: 20, color: Colors.redAccent),
-            onPressed: _signOut,
+          // ✅ PROFESYONEL MENÜ (Favoriler aktif)
+          PopupMenuButton<String>(
+            tooltip: 'Menü',
+            icon: const Icon(Icons.more_vert, color: Colors.black87),
+            onSelected: (v) async {
+              if (v == 'favorites') {
+                await _openFavorites(); // ✅ Favoriler açılır
+              } else if (v == 'my_listings') {
+                _notReady('İlanlarım');
+              } else if (v == 'saved_searches') {
+                _notReady('Kayıtlı Aramalar');
+              } else if (v == 'boost') {
+                _notReady('Doping / Öne Çıkar');
+              } else if (v == 'logout') {
+                await _signOut();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'favorites', child: Text('Favoriler')),
+              PopupMenuItem(value: 'my_listings', child: Text('İlanlarım')),
+              PopupMenuItem(
+                value: 'saved_searches',
+                child: Text('Kayıtlı Aramalar'),
+              ),
+              PopupMenuItem(value: 'boost', child: Text('Doping / Öne Çıkar')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'logout', child: Text('Çıkış')),
+            ],
           ),
           const SizedBox(width: 6),
         ],
       ),
-
       body: RefreshIndicator(
         onRefresh: _loadMe,
         child: _loading
@@ -229,7 +280,6 @@ class _HomePageState extends State<HomePage> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  // ✅ Gmail yok, sadece isim + avatar
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -266,16 +316,13 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
                   const Center(
                     child: Text(
                       'Aşağı çekerek yenileyebilirsin.',
                       style: TextStyle(color: Colors.black54),
                     ),
                   ),
-
                   const SizedBox(height: 24),
                 ],
               ),

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../home_page.dart';
+import '../listings/home_page.dart';
 import '../profile/profil_olustur_sayfasi.dart';
 import 'auth_page.dart'; // giriş ekranın (şifreyle giriş + kod ile giriş + kayıt)
 import 'sifre_olustur_page.dart';

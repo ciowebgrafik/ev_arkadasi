@@ -92,8 +92,6 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
       context,
       MaterialPageRoute(builder: (_) => const ProfilDuzenleSayfasi()),
     );
-
-    // Kaydettiyse yenile
     if (updated == true) {
       await _loadProfile();
     }
@@ -106,110 +104,173 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
         : null;
 
     return Scaffold(
-      backgroundColor: Colors.white, // ✅ siyahlığı bitirir
+      backgroundColor: const Color(0xFFF7F7F9),
+
+      // ✅ FOTOĞRAFTAKİ GİBİ: GERİ OK + ORTADA PROFİL
       appBar: AppBar(
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        foregroundColor: Colors.black87,
         elevation: 0,
         centerTitle: true,
         title: const Text(
-          'Profilim',
+          'Profil',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
-        actions: [
-          IconButton(
-            onPressed: _loadProfile,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Yenile',
-          ),
-        ],
+        // hafif alt çizgi (foto gibi)
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: Colors.black12),
+        ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : (_error.isNotEmpty)
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_error, textAlign: TextAlign.center),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: _loadProfile,
-                      child: const Text('Tekrar dene'),
-                    ),
-                  ],
+
+      body: SafeArea(
+        top: false, // AppBar zaten safe area
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : (_error.isNotEmpty)
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_error, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _loadProfile,
+                        child: const Text('Tekrar dene'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : RefreshIndicator(
+                onRefresh: _loadProfile,
+                child: LayoutBuilder(
+                  builder: (context, c) {
+                    const double maxW = 520;
+                    return ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      children: [
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: maxW),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // ✅ Üst kart (foto + isim + mail)
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color: Colors.black12.withOpacity(.06),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 30,
+                                        backgroundColor: Colors.grey.shade200,
+                                        backgroundImage: avatarProvider,
+                                        child: avatarProvider == null
+                                            ? const Icon(
+                                                Icons.person,
+                                                size: 28,
+                                                color: Colors.grey,
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _fullName.isEmpty
+                                                  ? 'İsimsiz'
+                                                  : _fullName,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _email.isEmpty ? '-' : _email,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: Colors.black.withOpacity(
+                                                  .55,
+                                                ),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                _infoCard(
+                                  icon: Icons.phone,
+                                  label: 'Telefon',
+                                  value: _phone,
+                                ),
+                                const SizedBox(height: 10),
+
+                                _infoCard(
+                                  icon: Icons.location_city,
+                                  label: 'Şehir',
+                                  value: _city,
+                                ),
+                                const SizedBox(height: 10),
+
+                                _infoCard(
+                                  icon: Icons.info_outline,
+                                  label: 'Kısa bio',
+                                  value: _bio,
+                                  maxLines: 3,
+                                ),
+
+                                const SizedBox(height: 14),
+
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 50,
+                                  child: ElevatedButton.icon(
+                                    onPressed: _goEdit,
+                                    icon: const Icon(Icons.edit),
+                                    label: const Text('Profili Düzenle'),
+                                  ),
+                                ),
+
+                                const SizedBox(height: 10),
+
+                                Text(
+                                  'Aşağı çekerek yenileyebilirsin.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadProfile,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                children: [
-                  Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: Colors.grey.shade200),
-                    ),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        radius: 28,
-                        backgroundColor: Colors.grey.shade200,
-                        backgroundImage: avatarProvider,
-                        child: avatarProvider == null
-                            ? const Icon(Icons.person)
-                            : null,
-                      ),
-                      title: Text(
-                        _fullName.isEmpty ? 'İsimsiz' : _fullName,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(_email.isEmpty ? '-' : _email),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  _infoCard(icon: Icons.phone, label: 'Telefon', value: _phone),
-                  const SizedBox(height: 10),
-
-                  _infoCard(
-                    icon: Icons.location_city,
-                    label: 'Şehir',
-                    value: _city,
-                  ),
-                  const SizedBox(height: 10),
-
-                  _infoCard(
-                    icon: Icons.info_outline,
-                    label: 'Kısa bio',
-                    value: _bio,
-                  ),
-                  const SizedBox(height: 18),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: _goEdit,
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Profili Düzenle'),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  Text(
-                    'Aşağı çekerek yenileyebilirsin.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                    textAlign: TextAlign.center,
-                  ),
-
-                  const SizedBox(height: 40),
-                ],
-              ),
-            ),
+      ),
     );
   }
 
@@ -217,20 +278,51 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
     required IconData icon,
     required String label,
     required String value,
+    int maxLines = 1,
   }) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+    final v = value.trim().isEmpty ? '-' : value.trim();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.black12.withOpacity(.06)),
       ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.grey.shade100,
-          child: Icon(icon, color: Colors.black87),
-        ),
-        title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(value.isEmpty ? '-' : value),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: Colors.grey.shade100,
+            child: Icon(icon, size: 18, color: Colors.black87),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.black.withOpacity(.55),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  v,
+                  maxLines: maxLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
