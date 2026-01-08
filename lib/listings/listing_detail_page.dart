@@ -498,6 +498,13 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
   String _clean(String s) => s.toString().trim();
 
+  Map<String, dynamic> _safeMap(dynamic v) {
+    if (v == null) return {};
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return v.map((k, val) => MapEntry('$k', val));
+    return {};
+  }
+
   Map<String, dynamic> _profile(Map<String, dynamic> it) {
     final p = it['profiles'];
     if (p is Map) return Map<String, dynamic>.from(p);
@@ -523,9 +530,9 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     return _clean((it['owner_name'] ?? '').toString());
   }
 
+  // ✅ FİYAT: roommate => periyotlu, diğer tüm türler => Tek Sefer
   String _fmtPrice(Map<String, dynamic> it) {
     final price = it['price'];
-    final period = (it['price_period'] ?? '').toString();
     final currency = (it['currency'] ?? 'TRY').toString();
 
     if (price == null) return 'Fiyat belirtilmemiş';
@@ -537,17 +544,29 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
     final cur = currency.toUpperCase() == 'TRY' ? '₺' : currency.toUpperCase();
 
-    String periodLabel = '';
+    final typeStr = _clean(it['type'] ?? '');
+    ListingType t = ListingType.roommate;
     try {
-      periodLabel = pricePeriodFromDb(period).label;
-    } catch (_) {
-      periodLabel = period;
-    }
+      t = listingTypeFromDb(typeStr);
+    } catch (_) {}
 
     final priceStr = numPrice % 1 == 0
         ? numPrice.toStringAsFixed(0)
         : numPrice.toStringAsFixed(2);
-    return '$cur$priceStr / $periodLabel';
+
+    if (t == ListingType.roommate) {
+      final periodRaw = (it['price_period'] ?? '').toString();
+      String periodLabel;
+      try {
+        periodLabel = pricePeriodFromDb(periodRaw).label;
+      } catch (_) {
+        periodLabel = periodRaw.isEmpty ? 'Aylık' : periodRaw;
+      }
+      return '$cur$priceStr / $periodLabel';
+    }
+
+    // ✅ item + transport + repair + local + cleaning + pet + daily_job => Tek Sefer
+    return '$cur$priceStr (Tek Sefer)';
   }
 
   String? _fmtCreatedAt(Map<String, dynamic> it) {
@@ -814,11 +833,12 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     final desc = _clean(it['description'] ?? '');
 
     final typeStr = _clean(it['type'] ?? '');
+    ListingType typeEnum = ListingType.roommate;
     String typeLabel = typeStr;
-    ListingType? typeEnum;
+
     try {
-      typeEnum = listingTypeFromDb(typeStr);
-      typeLabel = typeEnum.label;
+      typeEnum = listingTypeFromDb(typeStr); // ✅ yeni türler dahil
+      typeLabel = typeEnum.label; // ✅ TR label
     } catch (_) {}
 
     final city = _clean(it['city'] ?? '');
@@ -848,9 +868,9 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     final createdAt = _fmtCreatedAt(it);
     final views = _views(it);
 
-    final rules = (it['rules'] as Map?)?.cast<String, dynamic>() ?? {};
-    final preferences =
-        (it['preferences'] as Map?)?.cast<String, dynamic>() ?? {};
+    // ✅ jsonb güvenli map
+    final rules = _safeMap(it['rules']);
+    final preferences = _safeMap(it['preferences']);
 
     final showRoommateExtras = (typeEnum == ListingType.roommate);
 
@@ -858,7 +878,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: kTurkuaz,
-        // ✅ İlanlar ile aynı renk
         foregroundColor: Colors.white,
         title: const Text('İlan Detayı'),
         centerTitle: true,

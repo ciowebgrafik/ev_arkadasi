@@ -145,19 +145,16 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
   final _districtCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
 
-  bool _billsIncluded = false;
+  bool _billsIncluded = false; // sadece roommate
   bool _urgent = false;
 
-  // ✅ Doping planı
   BoostPlan _boostPlan = BoostPlan.none;
 
   ListingType _type = ListingType.roommate;
-  PricePeriod _pricePeriod = PricePeriod.monthly;
+  PricePeriod _pricePeriod = PricePeriod.monthly; // sadece roommate için
 
-  final _roomCountCtrl = TextEditingController();
-  final _jobPositionCtrl = TextEditingController();
-
-  ItemCategory _itemCategory = ItemCategory.all;
+  final _roomCountCtrl = TextEditingController(); // sadece roommate
+  ItemCategory _itemCategory = ItemCategory.all; // sadece item
 
   bool _ruleSmoking = false;
   bool _rulePets = false;
@@ -199,6 +196,9 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     _initEditIfNeeded();
   }
 
+  bool get _isBasicOtherType =>
+      _type != ListingType.roommate && _type != ListingType.item;
+
   void _initEditIfNeeded() {
     final l = widget.editListing;
     if (l == null) return;
@@ -223,11 +223,10 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     final rules = _castMap(l['rules']);
     final prefs = _castMap(l['preferences']);
 
-    // ✅ doping: yeni alan varsa onu oku, yoksa eski boosted'ı none/bronze gibi map et
+    // ✅ doping oku
     if (details.containsKey('boost_plan')) {
       _boostPlan = BoostPlanX.fromDb(details['boost_plan']);
     } else if (details['boosted'] == true) {
-      // eski veriler için: boosted=true ise en az bronz sayalım
       _boostPlan = BoostPlan.bronze;
     } else {
       _boostPlan = BoostPlan.none;
@@ -241,10 +240,6 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       _prefGender = (prefs['gender'] ?? 'any').toString();
       _prefStudent = prefs['student'] == true;
       _prefWorker = prefs['worker'] == true;
-    }
-
-    if (_type == ListingType.job) {
-      _jobPositionCtrl.text = (details['position'] ?? '').toString();
     }
 
     if (_type == ListingType.item) {
@@ -269,32 +264,12 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
 
   ListingType _parseType(dynamic v) {
     final s = (v ?? '').toString().toLowerCase().trim();
-    switch (s) {
-      case 'item':
-        return ListingType.item;
-      case 'job':
-        return ListingType.job;
-      case 'roommate':
-      default:
-        return ListingType.roommate;
-    }
+    return listingTypeFromDb(s);
   }
 
   PricePeriod _parsePeriod(dynamic v) {
     final s = (v ?? '').toString().toLowerCase().trim();
-    switch (s) {
-      case 'once':
-        return PricePeriod.once;
-      case 'daily':
-        return PricePeriod.daily;
-      case 'weekly':
-        return PricePeriod.weekly;
-      case 'yearly':
-        return PricePeriod.yearly;
-      case 'monthly':
-      default:
-        return PricePeriod.monthly;
-    }
+    return pricePeriodFromDb(s);
   }
 
   Map<String, dynamic> _castMap(dynamic v) {
@@ -319,7 +294,6 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
           .select('phone')
           .eq('id', user.id)
           .maybeSingle();
-
       final phone = (res?['phone'] ?? '').toString().trim();
       _myPhone = phone.isEmpty ? null : phone;
     } catch (_) {
@@ -337,14 +311,12 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     _districtCtrl.dispose();
     _priceCtrl.dispose();
     _roomCountCtrl.dispose();
-    _jobPositionCtrl.dispose();
     super.dispose();
   }
 
   PricePeriod _defaultPeriodForType(ListingType t) {
-    if (t == ListingType.item) return PricePeriod.once;
-    if (t == ListingType.job) return PricePeriod.daily;
-    return PricePeriod.monthly;
+    if (t == ListingType.roommate) return PricePeriod.monthly;
+    return PricePeriod.once; // ✅ item + diğer türler => Tek Sefer
   }
 
   int _remainingPickCount() {
@@ -352,6 +324,8 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     final remaining = 10 - current;
     return remaining < 0 ? 0 : remaining;
   }
+
+  int _totalPhotoCount() => _existingImagePaths.length + _pickedImages.length;
 
   Future<void> _pickImages() async {
     try {
@@ -386,9 +360,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     }
   }
 
-  void _removeNewImageAt(int i) {
-    setState(() => _pickedImages.removeAt(i));
-  }
+  void _removeNewImageAt(int i) => setState(() => _pickedImages.removeAt(i));
 
   void _removeExistingPath(String path) {
     setState(() {
@@ -398,7 +370,6 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     });
   }
 
-  // ✅ Doping detaylarını tek yerden üretelim
   Map<String, dynamic> _buildBoostDetails() {
     final now = DateTime.now();
     final days = _boostPlan.days;
@@ -407,8 +378,8 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     final end = boosted ? now.add(Duration(days: days)) : null;
 
     return <String, dynamic>{
-      'boost_plan': _boostPlan.dbValue, // none/bronze/silver/gold
-      'boosted': boosted, // geri uyum
+      'boost_plan': _boostPlan.dbValue,
+      'boosted': boosted,
       'boost_days': days,
       'boost_start': now.toIso8601String(),
       'boost_end': end?.toIso8601String(),
@@ -422,21 +393,14 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       if (_roomCountCtrl.text.trim().isNotEmpty) {
         details['room_count'] = _roomCountCtrl.text.trim();
       }
-    } else if (_type == ListingType.item) {
-      final v = _itemCategory.dbValue;
-      if (v != null) details['category'] = v;
-    } else if (_type == ListingType.job) {
-      if (_jobPositionCtrl.text.trim().isNotEmpty) {
-        details['position'] = _jobPositionCtrl.text.trim();
-      }
-      details['job_type'] = (_pricePeriod == PricePeriod.monthly)
-          ? 'monthly'
-          : 'daily';
     }
 
-    // ✅ doping detaylarını ekle
-    details.addAll(_buildBoostDetails());
+    if (_type == ListingType.item) {
+      final v = _itemCategory.dbValue;
+      if (v != null) details['category'] = v;
+    }
 
+    details.addAll(_buildBoostDetails());
     return details;
   }
 
@@ -458,11 +422,110 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     };
   }
 
+  void _snack(String msg) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+
+  // ===========================
+  // ✅ SUPABASE DIRECT SAVE
+  // ✅ RLS FIX: owner_id ekledik + update'e owner filter
+  // ===========================
+  Future<String> _supabaseCreateListing({
+    required ListingType type,
+    required String title,
+    String? description,
+    String? city,
+    String? district,
+    double? price,
+    required PricePeriod pricePeriod,
+    required bool billsIncluded,
+    required bool isUrgent,
+    String? phone,
+    required Map<String, dynamic> details,
+    required Map<String, dynamic> rules,
+    required Map<String, dynamic> preferences,
+    required String status,
+  }) async {
+    final sb = Supabase.instance.client;
+    final user = sb.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    final data = <String, dynamic>{
+      'owner_id': user.id, // ✅ FIX (RLS)
+      'type': listingTypeToDb(type),
+      'title': title,
+      'description': description,
+      'city': city,
+      'district': district,
+      'price': price,
+      'price_period': pricePeriodToDb(pricePeriod),
+      'bills_included': billsIncluded,
+      'is_urgent': isUrgent,
+      'phone': phone,
+      'details': details,
+      'rules': rules,
+      'preferences': preferences,
+      'status': status,
+    };
+
+    final res = await sb.from('listings').insert(data).select('id').single();
+    return (res['id'] ?? '').toString();
+  }
+
+  Future<void> _supabaseUpdateListing({
+    required String listingId,
+    required ListingType type,
+    required String title,
+    String? description,
+    String? city,
+    String? district,
+    double? price,
+    required PricePeriod pricePeriod,
+    required bool billsIncluded,
+    required bool isUrgent,
+    String? phone,
+    required Map<String, dynamic> details,
+    required Map<String, dynamic> rules,
+    required Map<String, dynamic> preferences,
+    required String status,
+  }) async {
+    final sb = Supabase.instance.client;
+    final user = sb.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    final data = <String, dynamic>{
+      'type': listingTypeToDb(type),
+      'title': title,
+      'description': description,
+      'city': city,
+      'district': district,
+      'price': price,
+      'price_period': pricePeriodToDb(pricePeriod),
+      'bills_included': billsIncluded,
+      'is_urgent': isUrgent,
+      'phone': phone,
+      'details': details,
+      'rules': rules,
+      'preferences': preferences,
+      'status': status,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    await sb
+        .from('listings')
+        .update(data)
+        .eq('id', listingId)
+        .eq('owner_id', user.id); // ✅ FIX (RLS)
+  }
+
   Future<void> _save({required bool publish}) async {
     if (_titleCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Başlık zorunlu.')));
+      _snack('Başlık zorunlu.');
+      return;
+    }
+
+    // ✅ Foto zorunlu: en az 2
+    if (_totalPhotoCount() < 2) {
+      _snack('En az 2 fotoğraf zorunlu.');
       return;
     }
 
@@ -474,14 +537,26 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       }
 
       final price = double.tryParse(_priceCtrl.text.replaceAll(',', '.'));
+
+      // ✅ roommate hariç tüm türlerde fiyat zorunlu
+      if (_type != ListingType.roommate && (price == null || price <= 0)) {
+        _snack('Fiyat zorunlu (Tek Sefer).');
+        setState(() => _loading = false);
+        return;
+      }
+
       final status = publish ? 'published' : 'draft';
+
+      final finalPeriod = (_type == ListingType.roommate)
+          ? _pricePeriod
+          : PricePeriod.once;
 
       // ================= EDIT =================
       if (widget.isEdit) {
         final id = _editId;
         if (id == null || id.isEmpty) throw Exception('İlan id bulunamadı.');
 
-        await _service.updateListing(
+        await _supabaseUpdateListing(
           listingId: id,
           type: _type,
           title: _titleCtrl.text.trim(),
@@ -493,10 +568,10 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
               ? null
               : _districtCtrl.text.trim(),
           price: price,
-          pricePeriod: (_type == ListingType.item)
-              ? PricePeriod.once
-              : _pricePeriod,
-          billsIncluded: _billsIncluded,
+          pricePeriod: finalPeriod,
+          billsIncluded: (_type == ListingType.roommate)
+              ? _billsIncluded
+              : false,
           isUrgent: _urgent,
           phone: _myPhone,
           details: _buildDetails(),
@@ -521,13 +596,11 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
 
         if (_photoMode == PhotoUpdateMode.append) {
           finalPaths = [..._existingImagePaths, ...newPaths];
-
           if (_deleteRemovedFromStorage && _removedExistingPaths.isNotEmpty) {
             pathsToDeleteFromStorage = [..._removedExistingPaths];
           }
         } else {
           finalPaths = [...newPaths];
-
           if (_deleteRemovedFromStorage) {
             final oldAll = _service.extractImagePaths(widget.editListing!);
             pathsToDeleteFromStorage = [...oldAll];
@@ -546,19 +619,13 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         }
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              publish ? 'Güncellendi + Yayınlandı ✅' : 'Güncellendi ✅',
-            ),
-          ),
-        );
+        _snack(publish ? 'Güncellendi + Yayınlandı ✅' : 'Güncellendi ✅');
         Navigator.pop(context, true);
         return;
       }
 
       // ================= CREATE =================
-      final listingId = await _service.createListing(
+      final listingId = await _supabaseCreateListing(
         type: _type,
         title: _titleCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty
@@ -569,10 +636,8 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             ? null
             : _districtCtrl.text.trim(),
         price: price,
-        pricePeriod: (_type == ListingType.item)
-            ? PricePeriod.once
-            : _pricePeriod,
-        billsIncluded: _billsIncluded,
+        pricePeriod: finalPeriod,
+        billsIncluded: (_type == ListingType.roommate) ? _billsIncluded : false,
         isUrgent: _urgent,
         phone: _myPhone,
         details: _buildDetails(),
@@ -581,34 +646,23 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         status: status,
       );
 
-      if (_pickedImages.isNotEmpty) {
-        final xfiles = _pickedImages.map((e) => e.file).toList();
-        final paths = await _service.uploadListingImages(
-          listingId: listingId,
-          images: xfiles,
-        );
-        await _service.attachListingImages(
-          listingId: listingId,
-          imagePaths: paths,
-        );
-      }
+      // foto upload (zaten en az 2 zorunlu)
+      final xfiles = _pickedImages.map((e) => e.file).toList();
+      final paths = await _service.uploadListingImages(
+        listingId: listingId,
+        images: xfiles,
+      );
+      await _service.attachListingImages(
+        listingId: listingId,
+        imagePaths: paths,
+      );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            publish
-                ? 'Yayınlandı ✅ (id: $listingId)'
-                : 'Taslak kaydedildi ✅ (id: $listingId)',
-          ),
-        ),
-      );
+      _snack(publish ? 'Yayınlandı ✅' : 'Taslak kaydedildi ✅');
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Hata: $e')));
+      _snack('Hata: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -692,9 +746,9 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
 
   Widget _newImagesSection() {
     final remaining = _remainingPickCount();
-    final totalCount = _existingImagePaths.length + _pickedImages.length;
+    final totalCount = _totalPhotoCount();
 
-    return _card('Yeni Fotoğraflar', [
+    return _card('Fotoğraflar (en az 2 zorunlu)', [
       Row(
         children: [
           Expanded(
@@ -717,8 +771,6 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         ],
       ),
       const SizedBox(height: 10),
-      if (_pickedImages.isEmpty)
-        const Text('Toplamda en fazla 10 fotoğraf olabilir.'),
       if (_pickedImages.isNotEmpty)
         SizedBox(
           height: 84,
@@ -764,13 +816,18 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             },
           ),
         ),
+      const SizedBox(height: 6),
+      Text(
+        'Toplam foto: $totalCount/10',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
     ]);
   }
 
   Widget _photoManagementSection() {
     if (!widget.isEdit) return const SizedBox.shrink();
 
-    return _card('Foto Yönetimi', [
+    return _card('Foto Yönetimi (Edit)', [
       DropdownButtonFormField<PhotoUpdateMode>(
         value: _photoMode,
         decoration: const InputDecoration(labelText: 'Yeni foto ekleyince'),
@@ -793,7 +850,6 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     ]);
   }
 
-  // ✅ DOPING: artık hem create hem editte görünsün
   Widget _dopingSection() {
     return _card('Doping', [
       DropdownButtonFormField<BoostPlan>(
@@ -808,7 +864,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       ),
       const SizedBox(height: 8),
       Text(
-        'Not: Şimdilik sadece plan bilgisi kaydediliyor. (Ödeme/aktif sıralama kısmını sonra bağlarız.)',
+        'Not: Şimdilik plan bilgisi kaydediliyor. (Ödeme/öne çıkarma sonra.)',
         style: Theme.of(context).textTheme.bodySmall,
       ),
     ]);
@@ -871,21 +927,21 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
 
   @override
   Widget build(BuildContext context) {
-    final periodItems = PricePeriod.values
-        .map((p) => DropdownMenuItem(value: p, child: Text(p.label)))
-        .toList();
-
     final phoneText = _loadingPhone
         ? 'Telefon: yükleniyor...'
         : (_myPhone == null || _myPhone!.trim().isEmpty)
         ? 'Telefon: Profilinde yok (Profilim’den ekleyebilirsin)'
         : 'Telefon (profil): ${_myPhone!}';
 
+    // ✅ ilan türlerini sırayla göster
+    final typeItems = [...ListingType.values]
+      ..sort((a, b) => a.order.compareTo(b.order));
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
-        title: Text(widget.isEdit ? 'İlanı Düzenle' : 'İlan Ekle'),
+        title: Text(widget.isEdit ? 'İlanı Düzenle' : 'İlan Yayınla'),
       ),
       body: AbsorbPointer(
         absorbing: _loading,
@@ -896,7 +952,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
               DropdownButtonFormField<ListingType>(
                 value: _type,
                 decoration: const InputDecoration(labelText: 'İlan Türü'),
-                items: ListingType.values
+                items: typeItems
                     .map(
                       (t) => DropdownMenuItem(value: t, child: Text(t.label)),
                     )
@@ -908,9 +964,10 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                         setState(() {
                           _type = v;
                           _pricePeriod = _defaultPeriodForType(v);
+
                           if (_type != ListingType.roommate)
                             _billsIncluded = false;
-                          if (_type == ListingType.item)
+                          if (_type != ListingType.item)
                             _itemCategory = ItemCategory.all;
                         });
                       },
@@ -943,15 +1000,10 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
               const SizedBox(height: 10),
               Text(phoneText, style: Theme.of(context).textTheme.bodySmall),
             ]),
-
-            // ✅ Doping: artık her iki modda da var
             _dopingSection(),
-
-            // ✅ Editte: foto yönetimi + mevcut fotolar
             _photoManagementSection(),
             _existingImagesSection(),
             _newImagesSection(),
-
             _card('Konum', [
               TextField(
                 controller: _cityCtrl,
@@ -963,21 +1015,26 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                 decoration: const InputDecoration(labelText: 'İlçe'),
               ),
             ]),
-
-            _card('Fiyat ve Periyot', [
+            _card('Fiyat', [
               TextField(
                 controller: _priceCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Fiyat'),
+                decoration: const InputDecoration(
+                  labelText: 'Fiyat (Tek Sefer) *',
+                ),
               ),
               const SizedBox(height: 10),
-              if (_type != ListingType.item)
+              if (_type == ListingType.roommate)
                 DropdownButtonFormField<PricePeriod>(
                   value: _pricePeriod,
                   decoration: const InputDecoration(
                     labelText: 'Fiyat Periyodu',
                   ),
-                  items: periodItems,
+                  items: PricePeriod.values
+                      .map(
+                        (p) => DropdownMenuItem(value: p, child: Text(p.label)),
+                      )
+                      .toList(),
                   onChanged: (v) =>
                       setState(() => _pricePeriod = v ?? _pricePeriod),
                 ),
@@ -986,7 +1043,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                 SwitchListTile(
                   value: _billsIncluded,
                   onChanged: (v) => setState(() => _billsIncluded = v),
-                  title: const Text('Faturalar dahil mi? (ev için)'),
+                  title: const Text('Faturalar dahil mi? (Ev Arkadaşı)'),
                   contentPadding: EdgeInsets.zero,
                 ),
               SwitchListTile(
@@ -995,9 +1052,13 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                 title: const Text('Acil / öne çıkar'),
                 contentPadding: EdgeInsets.zero,
               ),
+              if (_isBasicOtherType)
+                Text(
+                  'Bu ilan türünde sadece temel alanlar var (başlık, açıklama, foto, konum, fiyat).',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
             ]),
-
-            _card('Türüne Göre Ek Alanlar', [
+            _card('Ev Arkadaşı (Özel)', [
               if (_type == ListingType.roommate)
                 TextField(
                   controller: _roomCountCtrl,
@@ -1005,24 +1066,13 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                     labelText: 'Ev Oda Sayısı (örn: 2+1)',
                   ),
                 ),
-              if (_type == ListingType.job) ...[
-                TextField(
-                  controller: _jobPositionCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Pozisyon (örn: garson)',
-                  ),
+              if (_type != ListingType.roommate)
+                const Text(
+                  'Bu bölüm sadece Ev Arkadaşı ilanlarında kullanılır.',
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Acil iş ilanında genelde "Günlük" veya "Aylık" seçilir.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
             ]),
-
             _rulesSection(),
             _preferencesSection(),
-
             const SizedBox(height: 12),
             Row(
               children: [

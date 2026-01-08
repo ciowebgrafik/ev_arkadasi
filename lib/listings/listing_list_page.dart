@@ -45,7 +45,30 @@ extension ItemCategoryX on ItemCategory {
 }
 
 class ListingListPage extends StatefulWidget {
-  const ListingListPage({super.key});
+  const ListingListPage({
+    super.key,
+    this.initialType,
+    this.initialPeriod,
+    this.initialItemCategory,
+    this.initialCity,
+    this.initialDistrict,
+    this.initialQuery,
+  });
+
+  /// ✅ Menüden hangi türe basıldıysa buradan gelir:
+  /// ListingListPage(initialType: ListingType.transport) gibi.
+  final ListingType? initialType;
+
+  /// (opsiyonel) başlangıç periyodu
+  final PricePeriod? initialPeriod;
+
+  /// (opsiyonel) item için başlangıç kategori
+  final ItemCategory? initialItemCategory;
+
+  /// (opsiyonel) başlangıç şehir/ilçe/q
+  final String? initialCity;
+  final String? initialDistrict;
+  final String? initialQuery;
 
   @override
   State<ListingListPage> createState() => _ListingListPageState();
@@ -84,6 +107,30 @@ class _ListingListPageState extends State<ListingListPage> {
   @override
   void initState() {
     super.initState();
+
+    // ✅ Menüden gelen başlangıç filtrelerini uygula
+    _type = widget.initialType;
+
+    // başlangıç şehir/ilçe/q
+    if ((widget.initialCity ?? '').trim().isNotEmpty) {
+      _cityCtrl.text = widget.initialCity!.trim();
+    }
+    if ((widget.initialDistrict ?? '').trim().isNotEmpty) {
+      _districtCtrl.text = widget.initialDistrict!.trim();
+    }
+    if ((widget.initialQuery ?? '').trim().isNotEmpty) {
+      _qCtrl.text = widget.initialQuery!.trim();
+    }
+
+    // item ise kategori, değilse period
+    if (_type == ListingType.item) {
+      _itemCategory = widget.initialItemCategory;
+      _period = null;
+    } else {
+      _period = widget.initialPeriod;
+      _itemCategory = null;
+    }
+
     _load();
   }
 
@@ -422,8 +469,16 @@ class _ListingListPageState extends State<ListingListPage> {
     if (applied == true) {
       setState(() {
         _type = tmpType;
-        _period = tmpPeriod;
-        _itemCategory = tmpItemCat;
+
+        // ✅ item ise period kapat, değilse kategori kapat
+        if (_type == ListingType.item) {
+          _itemCategory = tmpItemCat;
+          _period = null;
+        } else {
+          _period = tmpPeriod;
+          _itemCategory = null;
+        }
+
         _cityCtrl.text = tmpCity.text;
         _districtCtrl.text = tmpDistrict.text;
       });
@@ -1107,11 +1162,16 @@ class _ListingListPageState extends State<ListingListPage> {
   Widget build(BuildContext context) {
     const maxW = 560.0;
 
+    // ✅ başlık istersek tipe göre gösterebiliriz
+    final dynamicTitle = (_type == null)
+        ? 'İlanlar'
+        : '${_type!.label} İlanları';
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: kTurkuaz, // ✅ Turkuaz: 0xFF00B8D4
+        backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
-        title: const Text('İlanlar'),
+        title: Text(dynamicTitle),
         actions: [
           IconButton(
             tooltip: 'Filtrele',

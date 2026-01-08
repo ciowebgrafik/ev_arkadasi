@@ -5,6 +5,7 @@ import '../features/auth/auth_gate.dart';
 import '../features/profile/profil_sayfasi.dart';
 import 'favorites_page.dart';
 import 'listing_create_page.dart';
+import 'listing_enums.dart'; // ✅ ListingType için gerekli
 import 'listing_list_page.dart';
 import 'my_listings_page.dart';
 
@@ -78,10 +79,6 @@ class _HomePageState extends State<HomePage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  void _notReady(String title) {
-    _snack('$title yakında 🙂');
-  }
-
   Future<void> _signOut() async {
     await supabase.auth.signOut();
     if (!mounted) return;
@@ -101,6 +98,8 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     await _loadMe();
   }
+
+  // ================= NAVIGATION =================
 
   Future<void> _openCreateListing() async {
     final changed = await Navigator.push(
@@ -123,18 +122,87 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // ✅ TÜRE GÖRE AÇILAN LİSTELER
+
   Future<void> _openRoommateListings() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ListingListPage()),
+      MaterialPageRoute(
+        builder: (_) =>
+            const ListingListPage(initialType: ListingType.roommate),
+      ),
     );
   }
 
   Future<void> _openItemListings() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ListingListPage()),
+      MaterialPageRoute(
+        builder: (_) => const ListingListPage(initialType: ListingType.item),
+      ),
     );
+  }
+
+  Future<void> _openMovingServices() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const ListingListPage(initialType: ListingType.transport),
+      ),
+    );
+  }
+
+  Future<void> _openRepair() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ListingListPage(initialType: ListingType.repair),
+      ),
+    );
+  }
+
+  Future<void> _openNearbyTrades() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ListingListPage(initialType: ListingType.local),
+      ),
+    );
+  }
+
+  Future<void> _openCleaning() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const ListingListPage(initialType: ListingType.cleaning),
+      ),
+    );
+  }
+
+  Future<void> _openPetAdoption() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ListingListPage(initialType: ListingType.pet),
+      ),
+    );
+  }
+
+  Future<void> _openDailyJobs() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const ListingListPage(initialType: ListingType.daily_job),
+      ),
+    );
+  }
+
+  // (şimdilik özel algoritma yok → normal roommate listesi açıyoruz)
+  Future<void> _openFindBestRoommate() async {
+    await _openRoommateListings();
   }
 
   Future<void> _openFavorites() async {
@@ -151,20 +219,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ---- Yeni aksiyonlar (şimdilik "yakında") ----
-  void _openFindBestRoommate() => _notReady('Bana Uygun Ev Arkadaşı Bul');
-
-  void _openMovingServices() => _notReady('Nakliye Hizmetleri');
-
-  void _openRepair() => _notReady('Dekorasyon / Onarım');
-
-  void _openNearbyTrades() => _notReady('Yakınımdaki Küçük Esnaf');
-
-  void _openCleaning() => _notReady('Temizlik');
-
-  void _openPetAdoption() => _notReady('Evcil Hayvan Sahiplendirme');
-
-  void _openDailyJobs() => _notReady('Günlük İş');
+  // ================= DRAWER =================
 
   Drawer _buildDrawer() {
     return Drawer(
@@ -239,7 +294,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ---------------- UI ----------------
+  // ================= UI HELPERS =================
 
   Widget _menuPill({
     required double width,
@@ -314,7 +369,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ---------------- BUILD ----------------
+  // ================= BUILD =================
 
   @override
   Widget build(BuildContext context) {
@@ -328,7 +383,6 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
         elevation: 0,
-        centerTitle: false,
         titleSpacing: 0,
         leading: Builder(
           builder: (ctx) => IconButton(
@@ -368,10 +422,6 @@ class _HomePageState extends State<HomePage> {
                 await _openFavorites();
               } else if (v == 'my_listings') {
                 await _openMyListings();
-              } else if (v == 'saved_searches') {
-                _notReady('Kayıtlı Aramalar');
-              } else if (v == 'boost') {
-                _notReady('Doping / Öne Çıkar');
               } else if (v == 'logout') {
                 await _signOut();
               }
@@ -379,11 +429,6 @@ class _HomePageState extends State<HomePage> {
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'favorites', child: Text('Favoriler')),
               PopupMenuItem(value: 'my_listings', child: Text('İlanlarım')),
-              PopupMenuItem(
-                value: 'saved_searches',
-                child: Text('Kayıtlı Aramalar'),
-              ),
-              PopupMenuItem(value: 'boost', child: Text('Doping / Öne Çıkar')),
               PopupMenuDivider(),
               PopupMenuItem(value: 'logout', child: Text('Çıkış')),
             ],
@@ -403,54 +448,8 @@ class _HomePageState extends State<HomePage> {
             : ListView(
                 padding: const EdgeInsets.only(top: 16, bottom: 16),
                 children: [
-                  // Profil kutusu
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 22,
-                            backgroundColor: Colors.grey.shade200,
-                            backgroundImage: avatarUrl != null
-                                ? NetworkImage(avatarUrl!)
-                                : null,
-                            child: avatarUrl == null
-                                ? const Icon(
-                                    Icons.person,
-                                    color: Colors.grey,
-                                    size: 20,
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              displayName.isNotEmpty
-                                  ? displayName
-                                  : 'Kullanıcı',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
                   const SizedBox(height: 22),
 
-                  // ✅ SIRALAMA (notunla birebir)
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -542,7 +541,6 @@ class _HomePageState extends State<HomePage> {
 
                   const SizedBox(height: 18),
 
-                  // Reklam alanı
                   _adSlot(width: safeWidth, alignRight: false),
 
                   const SizedBox(height: 18),

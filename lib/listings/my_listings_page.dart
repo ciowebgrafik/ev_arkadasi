@@ -114,17 +114,12 @@ class _MyListingsPageState extends State<MyListingsPage> {
     return Colors.blue.shade800;
   }
 
+  // ✅ YENİ: Tüm ilan türlerini listing_enums.dart üzerinden güvenli çöz
   ListingType _parseType(dynamic v) {
-    final s = (v ?? '').toString().toLowerCase().trim();
-    switch (s) {
-      case 'item':
-        return ListingType.item;
-      case 'job':
-        return ListingType.job;
-      case 'roommate':
-      default:
-        return ListingType.roommate;
-    }
+    final s = (v ?? '').toString().trim();
+    return listingTypeFromDb(
+      s,
+    ); // roommate/item + diğer tüm türler burada çözülür
   }
 
   // ======================================================
