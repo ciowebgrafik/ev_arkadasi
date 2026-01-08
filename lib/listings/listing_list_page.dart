@@ -52,6 +52,8 @@ class ListingListPage extends StatefulWidget {
 }
 
 class _ListingListPageState extends State<ListingListPage> {
+  static const Color kTurkuaz = Color(0xFF00B8D4);
+
   final _service = ListingsService();
 
   // ✅ Saved Searches Service (Supabase)
@@ -91,6 +93,92 @@ class _ListingListPageState extends State<ListingListPage> {
     _districtCtrl.dispose();
     _qCtrl.dispose();
     super.dispose();
+  }
+
+  // ---------------------- BOOST BADGE HELPERS ----------------------
+
+  Map<String, dynamic> _detailsOf(Map<String, dynamic> item) {
+    final d = item['details'];
+    if (d is Map<String, dynamic>) return d;
+    if (d is Map) return d.map((k, v) => MapEntry('$k', v));
+    return {};
+  }
+
+  bool _isBoostActive(Map<String, dynamic> item) {
+    final details = _detailsOf(item);
+    final endStr = (details['boost_end'] ?? '').toString().trim();
+    if (endStr.isEmpty) return false;
+
+    try {
+      final end = DateTime.parse(endStr);
+      return end.isAfter(DateTime.now());
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _boostLabel(Map<String, dynamic> item) {
+    final details = _detailsOf(item);
+    final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
+
+    switch (plan) {
+      case 'bronze':
+        return 'BRONZ';
+      case 'silver':
+        return 'GÜMÜŞ';
+      case 'gold':
+        return 'ALTIN';
+    }
+
+    // eski veriye fallback
+    final boosted = details['boosted'] == true;
+    return boosted ? 'BRONZ' : '';
+  }
+
+  Color _boostColor(String label) {
+    switch (label) {
+      case 'ALTIN':
+        return const Color(0xFFFFC107);
+      case 'GÜMÜŞ':
+        return const Color(0xFFB0BEC5);
+      case 'BRONZ':
+        return const Color(0xFFB87333);
+      default:
+        return kTurkuaz;
+    }
+  }
+
+  Widget _boostBadge(Map<String, dynamic> item) {
+    if (!_isBoostActive(item)) return const SizedBox.shrink();
+
+    final label = _boostLabel(item);
+    if (label.isEmpty) return const SizedBox.shrink();
+
+    final bg = _boostColor(label);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 10,
+            offset: Offset(0, 4),
+            color: Color(0x33000000),
+          ),
+        ],
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.w900,
+          fontSize: 11,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
   }
 
   // ---------------------- LOAD ----------------------
@@ -216,7 +304,6 @@ class _ListingListPageState extends State<ListingListPage> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 12),
-
                   DropdownButtonFormField<ListingType?>(
                     value: tmpType,
                     decoration: const InputDecoration(
@@ -283,7 +370,6 @@ class _ListingListPageState extends State<ListingListPage> {
                     ),
 
                   const SizedBox(height: 12),
-
                   TextField(
                     controller: tmpCity,
                     decoration: const InputDecoration(
@@ -292,7 +378,6 @@ class _ListingListPageState extends State<ListingListPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-
                   TextField(
                     controller: tmpDistrict,
                     decoration: const InputDecoration(
@@ -300,9 +385,7 @@ class _ListingListPageState extends State<ListingListPage> {
                       border: OutlineInputBorder(),
                     ),
                   ),
-
                   const SizedBox(height: 14),
-
                   Row(
                     children: [
                       Expanded(
@@ -519,9 +602,7 @@ class _ListingListPageState extends State<ListingListPage> {
     }
 
     final itemCatStr = (f['item_category'] ?? '').toString().trim();
-    if (itemCatStr.isNotEmpty) {
-      newItemCat = ItemCategoryX.fromDb(itemCatStr);
-    }
+    if (itemCatStr.isNotEmpty) newItemCat = ItemCategoryX.fromDb(itemCatStr);
 
     final periodStr = (f['period'] ?? '').toString().trim();
     if (periodStr.isNotEmpty) {
@@ -747,12 +828,12 @@ class _ListingListPageState extends State<ListingListPage> {
     final period = (it['price_period'] ?? '').toString();
     final currency = (it['currency'] ?? 'TRY').toString();
 
-    if (price == null) return 'Fiyat belirtilmemiş';
+    if (price == null) return 'Fiyat yok';
 
     final numPrice = (price is num)
         ? price.toDouble()
         : double.tryParse('$price');
-    if (numPrice == null) return 'Fiyat belirtilmemiş';
+    if (numPrice == null) return 'Fiyat yok';
 
     final cur = currency.toUpperCase() == 'TRY' ? '₺' : currency.toUpperCase();
 
@@ -788,43 +869,6 @@ class _ListingListPageState extends State<ListingListPage> {
 
   bool _isUrgent(Map<String, dynamic> it) => it['is_urgent'] == true;
 
-  bool _billsIncluded(Map<String, dynamic> it) => it['bills_included'] == true;
-
-  // ✅ profiles.phone okuma (sağlam)
-  String _profilePhone(Map<String, dynamic> it) {
-    try {
-      final p = it['profiles'];
-      if (p is Map) return _clean((p['phone'] ?? '').toString());
-      if (p is List && p.isNotEmpty && p.first is Map) {
-        final mp = p.first as Map;
-        return _clean((mp['phone'] ?? '').toString());
-      }
-      return '';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  String _profileFullName(Map<String, dynamic> it) {
-    try {
-      final p = it['profiles'];
-      if (p is Map) return _clean((p['full_name'] ?? '').toString());
-      if (p is List && p.isNotEmpty && p.first is Map) {
-        final mp = p.first as Map;
-        return _clean((mp['full_name'] ?? '').toString());
-      }
-      return '';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  String _title(Map<String, dynamic> it) =>
-      _clean((it['title'] ?? '').toString());
-
-  String _status(Map<String, dynamic> it) =>
-      _clean((it['status'] ?? '').toString());
-
   Future<String?> _getFirstImageSignedUrl(Map<String, dynamic> it) async {
     try {
       final paths = _service.extractImagePaths(it);
@@ -835,10 +879,11 @@ class _ListingListPageState extends State<ListingListPage> {
     }
   }
 
-  Widget _chip(String text, {Color? bg, Color? fg}) {
+  // ✅ küçük chip (kompakt)
+  Widget _miniChip(String text, {Color? bg, Color? fg}) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: bg ?? theme.colorScheme.surfaceVariant,
         borderRadius: BorderRadius.circular(999),
@@ -846,7 +891,7 @@ class _ListingListPageState extends State<ListingListPage> {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 11,
           color: fg ?? theme.colorScheme.onSurfaceVariant,
           fontWeight: FontWeight.w700,
         ),
@@ -863,14 +908,23 @@ class _ListingListPageState extends State<ListingListPage> {
       children: [
         GestureDetector(
           onTap: _openFilterSheet,
-          child: _chip(
-            _activeFilterChipText,
-            bg: theme.colorScheme.primary.withOpacity(0.10),
-            fg: theme.colorScheme.primary,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              _activeFilterChipText,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: theme.colorScheme.primary,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 10),
-
         TextField(
           controller: _qCtrl,
           textInputAction: TextInputAction.search,
@@ -900,34 +954,23 @@ class _ListingListPageState extends State<ListingListPage> {
     );
   }
 
-  // ---------------------- UI: CARD ----------------------
+  // ---------------------- UI: CARD (KOMPAKT) ----------------------
 
   Widget _listingCard(Map<String, dynamic> it) {
     final id = (it['id'] ?? '').toString();
     final firstUrl = _firstImageUrlCache[id];
 
-    final title = _title(it);
+    final title = _clean((it['title'] ?? '').toString());
     final urgent = _isUrgent(it);
+
+    final typeLabel = _fmtType(it);
+    final priceLabel = _fmtPrice(it);
     final loc = _fmtLocation(it);
 
-    final phone = _profilePhone(it);
-    final fullName = _profileFullName(it);
-
-    final status = _status(it);
-
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       onTap: () {
         final copy = Map<String, dynamic>.from(it);
-        if ((copy['phone'] ?? '').toString().trim().isEmpty &&
-            phone.trim().isNotEmpty) {
-          copy['phone'] = phone;
-        }
-        if ((copy['owner_name'] ?? '').toString().trim().isEmpty &&
-            fullName.trim().isNotEmpty) {
-          copy['owner_name'] = fullName;
-        }
-
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => ListingDetailPage(listing: copy)),
@@ -935,95 +978,121 @@ class _ListingListPageState extends State<ListingListPage> {
       },
       child: Card(
         elevation: 0,
-        margin: const EdgeInsets.only(bottom: 14),
+        margin: const EdgeInsets.only(bottom: 10),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: Colors.grey.shade200),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
+          padding: const EdgeInsets.all(10),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ✅ Foto (küçük) + rozetler
               ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: firstUrl == null || firstUrl.trim().isEmpty
-                      ? Container(
-                          color: Colors.grey.shade100,
-                          alignment: Alignment.center,
-                          child: Icon(
-                            Icons.image_outlined,
-                            color: Colors.grey.shade500,
-                            size: 42,
-                          ),
-                        )
-                      : Image.network(
-                          firstUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stack) {
-                            return Container(
-                              color: Colors.grey.shade100,
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.broken_image_outlined,
-                                color: Colors.grey.shade500,
-                                size: 42,
-                              ),
-                            );
-                          },
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return Container(
-                              color: Colors.grey.shade100,
-                              alignment: Alignment.center,
-                              child: const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 96,
+                  height: 96,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: (firstUrl == null || firstUrl.trim().isEmpty)
+                            ? Container(
+                                color: Colors.grey.shade100,
+                                alignment: Alignment.center,
+                                child: Icon(
+                                  Icons.image_outlined,
+                                  color: Colors.grey.shade500,
+                                  size: 30,
                                 ),
+                              )
+                            : Image.network(
+                                firstUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => Container(
+                                  color: Colors.grey.shade100,
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    color: Colors.grey.shade500,
+                                    size: 30,
+                                  ),
+                                ),
+                                loadingBuilder: (context, child, progress) {
+                                  if (progress == null) return child;
+                                  return Container(
+                                    color: Colors.grey.shade100,
+                                    alignment: Alignment.center,
+                                    child: const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
+                      ),
+                      Positioned(left: 6, top: 6, child: _boostBadge(it)),
+                      if (urgent)
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'ACİL',
+                              style: TextStyle(
+                                color: Colors.red.shade700,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
                         ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
+              const SizedBox(width: 10),
+
+              // ✅ Sağ taraf: başlık + 3 chip
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       title.isEmpty ? '(Başlıksız ilan)' : title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  ),
-                  if (urgent) ...[
-                    const SizedBox(width: 10),
-                    _chip('ACİL', bg: Colors.red.shade50, fg: Colors.red),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _miniChip(typeLabel),
+                        _miniChip(priceLabel),
+                        _miniChip(loc.isNotEmpty ? loc : 'Konum yok'),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                   ],
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _chip(_fmtType(it)),
-                  _chip(_fmtPrice(it)),
-                  _chip(loc.isNotEmpty ? loc : 'Konum belirtilmemiş'),
-                  if (_billsIncluded(it)) _chip('Faturalar dahil'),
-                  if (phone.isNotEmpty) _chip('Tel: $phone'),
-                  if (status.isNotEmpty) _chip(status),
-                ],
+                ),
               ),
             ],
           ),
@@ -1040,13 +1109,13 @@ class _ListingListPageState extends State<ListingListPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF14B8A6), // ✅ Turkuaz
+        backgroundColor: kTurkuaz, // ✅ Turkuaz: 0xFF00B8D4
         foregroundColor: Colors.white,
         title: const Text('İlanlar'),
         actions: [
           IconButton(
             tooltip: 'Filtrele',
-            icon: const Icon(Icons.tune), // ✅ daha güzel filtre ikonu
+            icon: const Icon(Icons.tune),
             onPressed: _openFilterSheet,
           ),
           PopupMenuButton<SortOption>(
@@ -1085,8 +1154,6 @@ class _ListingListPageState extends State<ListingListPage> {
           ),
         ],
       ),
-
-      // ✅ SABİT ARAMA BAR + KAYAN LİSTE
       body: Column(
         children: [
           Center(
@@ -1099,7 +1166,6 @@ class _ListingListPageState extends State<ListingListPage> {
             ),
           ),
           const Divider(height: 1),
-
           Expanded(
             child: RefreshIndicator(
               onRefresh: _load,
@@ -1209,7 +1275,9 @@ class SavedSearch {
 
     return SavedSearch(
       id: (m['id'] ?? '').toString(),
-      name: (name == null || name.trim().isEmpty) ? null : name.trim(),
+      name: (name == null || name.trim().isNotEmpty == false)
+          ? null
+          : name.trim(),
       filters: filters,
       createdAt: dt,
     );

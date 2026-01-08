@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../widgets/app_page.dart';
 import 'auth_otp_request_page.dart';
 
 class AuthPasswordLoginPage extends StatefulWidget {
@@ -45,11 +44,13 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
 
     setState(() => _loading = true);
     try {
+      // ⚠️ Bu şu an giriş değil, reset linki gönderiyor (mevcut davranışını bozmadım)
       await Supabase.instance.client.auth.resetPasswordForEmail(
         email,
         redirectTo: 'evarkadasi://reset-password',
       );
-      // AuthGate session'ı görüp yönlendirecek
+
+      _snack('Şifre sıfırlama linki gönderildi ✅');
     } on AuthException catch (e) {
       _snack(e.message);
     } catch (e) {
@@ -69,7 +70,6 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
 
     setState(() => _loading = true);
     try {
-      // 🔥 ÖNEMLİ: deep link ile uygulamaya dönmesi için
       await Supabase.instance.client.auth.resetPasswordForEmail(
         email,
         redirectTo: 'evarkadasi://reset-password',
@@ -94,64 +94,64 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return AppPage(
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 12),
-            Text('Giriş', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 16),
-
-            TextField(
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Giriş')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 12),
+              Text('Giriş', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-
-            TextField(
-              controller: _passCtrl,
-              obscureText: !_showPass,
-              decoration: InputDecoration(
-                labelText: 'Şifre',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _showPass = !_showPass),
-                  icon: Icon(
-                    _showPass ? Icons.visibility_off : Icons.visibility,
+              const SizedBox(height: 12),
+              TextField(
+                controller: _passCtrl,
+                obscureText: !_showPass,
+                decoration: InputDecoration(
+                  labelText: 'Şifre',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(() => _showPass = !_showPass),
+                    icon: Icon(
+                      _showPass ? Icons.visibility_off : Icons.visibility,
+                    ),
                   ),
                 ),
               ),
-            ),
-
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: _loading ? null : _forgotPassword,
-                  child: const Text('Şifremi unuttum'),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: _loading ? null : _goRegisterWithCode,
-                  child: const Text('Kayıt Ol'),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 48,
-              child: FilledButton(
-                onPressed: _loading ? null : _login,
-                child: Text(_loading ? 'Giriş yapılıyor...' : 'Giriş Yap'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: _loading ? null : _forgotPassword,
+                    child: const Text('Şifremi unuttum'),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _loading ? null : _goRegisterWithCode,
+                    child: const Text('Kayıt Ol'),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 48,
+                child: FilledButton(
+                  onPressed: _loading ? null : _login,
+                  child: Text(_loading ? 'İşleniyor...' : 'Giriş Yap'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -38,8 +38,6 @@ class ListingsService {
 
   // ------------------ CRUD ------------------
 
-  /// INSERT: owner_id = auth.uid() olacak şekilde.
-  /// Dönüş: listingId string (db'de int/uuid olsa bile)
   Future<String> createListing({
     required ListingType type,
     required String title,
@@ -51,22 +49,16 @@ class ListingsService {
     String currency = 'TRY',
     bool billsIncluded = false,
     bool isUrgent = false,
-
-    // ✅ YENİ: İlan telefonu (MVP'de profilden gelsin)
     String? phone,
-
-    // ✅ YENİ: Ev Eşyası kategori (white_goods / furniture / other)
     String? itemCategory,
-
     Map<String, dynamic>? details,
     Map<String, dynamic>? rules,
     Map<String, dynamic>? preferences,
-    String status = 'draft', // draft/published/pending/approved...
+    String status = 'draft',
   }) async {
     final user = _db.auth.currentUser;
     if (user == null) throw Exception('Giriş yapılmamış.');
 
-    // ✅ details merge: item ise category yaz
     final mergedDetails = <String, dynamic>{
       ..._cleanJson(details),
       if (type == ListingType.item &&
@@ -80,25 +72,17 @@ class ListingsService {
       'type': listingTypeToDb(type),
       'title': title.trim(),
       'description': _cleanNullable(description),
-
-      // ✅ city/district kaydet
       'city': _cleanNullable(city),
       'district': _cleanNullable(district),
-
       'price': price,
       'price_period': pricePeriodToDb(pricePeriod),
       'currency': currency,
       'bills_included': billsIncluded,
       'is_urgent': isUrgent,
-
-      // ✅ TELEFON alanı (listings.phone) - istersen MVP’de null bırak
       'phone': _cleanNullable(phone),
-
-      // ✅ jsonb
       'details': mergedDetails,
       'rules': _cleanJson(rules),
       'preferences': _cleanJson(preferences),
-
       'status': status,
     };
 
@@ -110,7 +94,52 @@ class ListingsService {
     return res['id'].toString();
   }
 
-  /// ✅ İlan jsonb alanlarını güncelle (rules/preferences/details)
+  Future<void> updateListing({
+    required String listingId,
+    required ListingType type,
+    required String title,
+    String? description,
+    String? city,
+    String? district,
+    double? price,
+    PricePeriod pricePeriod = PricePeriod.monthly,
+    String currency = 'TRY',
+    bool billsIncluded = false,
+    bool isUrgent = false,
+    String? phone,
+    Map<String, dynamic>? details,
+    Map<String, dynamic>? rules,
+    Map<String, dynamic>? preferences,
+    String? status,
+  }) async {
+    final user = _db.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    final payload = <String, dynamic>{
+      'type': listingTypeToDb(type),
+      'title': title.trim(),
+      'description': _cleanNullable(description),
+      'city': _cleanNullable(city),
+      'district': _cleanNullable(district),
+      'price': price,
+      'price_period': pricePeriodToDb(pricePeriod),
+      'currency': currency,
+      'bills_included': billsIncluded,
+      'is_urgent': isUrgent,
+      'phone': _cleanNullable(phone),
+      'details': _cleanJson(details),
+      'rules': _cleanJson(rules),
+      'preferences': _cleanJson(preferences),
+      if (status != null) 'status': status.trim(),
+    };
+
+    await _db
+        .from('listings')
+        .update(payload)
+        .eq('id', listingId)
+        .eq('owner_id', user.id);
+  }
+
   Future<void> updateListingJson({
     required String listingId,
     Map<String, dynamic>? details,
@@ -118,25 +147,22 @@ class ListingsService {
     Map<String, dynamic>? preferences,
   }) async {
     final payload = <String, dynamic>{};
-
     if (details != null) payload['details'] = _cleanJson(details);
     if (rules != null) payload['rules'] = _cleanJson(rules);
     if (preferences != null) payload['preferences'] = _cleanJson(preferences);
-
     if (payload.isEmpty) return;
 
     await _db.from('listings').update(payload).eq('id', listingId);
   }
 
-  /// ✅ Çoklu foto yükle (Private bucket)
-  /// Geriye DB'ye yazacağımız "path listesi" döner.
+  // ===================== Photos =====================
+
   Future<List<String>> uploadListingImages({
     required String listingId,
     required List<XFile> images,
   }) async {
     final user = _db.auth.currentUser;
     if (user == null) throw Exception('Giriş yapılmamış.');
-
     if (images.isEmpty) return [];
 
     final List<String> paths = [];
@@ -151,7 +177,6 @@ class ListingsService {
       final filename =
           '${DateTime.now().millisecondsSinceEpoch}${user.id}${rnd.nextInt(999999)}.$ext';
 
-      // ✅ Path: listings/<listingId>/<filename>
       final path = 'listings/$listingId/$filename';
 
       await _db.storage
@@ -168,20 +193,34 @@ class ListingsService {
     return paths;
   }
 
-  /// ✅ DB'de image_paths alanına yaz (jsonb)
+  /// REPLACE
   Future<void> attachListingImages({
     required String listingId,
     required List<String> imagePaths,
   }) async {
-    if (imagePaths.isEmpty) return;
-
     await _db
         .from('listings')
         .update({'image_paths': imagePaths})
         .eq('id', listingId);
   }
 
-  // ===================== ✅ image_paths güvenli okuma =====================
+  /// Storage'dan path sil (Private bucket)
+  Future<void> deleteListingImagesFromStorage(List<String> paths) async {
+    final cleaned = paths
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .map((p) => p.startsWith('listings/') ? p : 'listings/$p')
+        .toList();
+    if (cleaned.isEmpty) return;
+
+    try {
+      await _db.storage.from(listingImagesBucket).remove(cleaned);
+    } catch (e) {
+      debugPrint('deleteListingImagesFromStorage ERROR: $e');
+    }
+  }
+
+  // ===================== image_paths read =====================
 
   List<String> extractImagePaths(Map<String, dynamic> listing) {
     final v = listing['image_paths'];
@@ -211,18 +250,13 @@ class ListingsService {
     return [];
   }
 
-  /// ✅ Signed URL üret
-  /// KRİTİK FIX: path "uuid/file.jpg" gelirse otomatik "listings/" ekler
   Future<String?> createSignedListingImageUrl({
     required String path,
     int expiresInSeconds = 3600,
   }) async {
     var p = path.trim();
     if (p.isEmpty) return null;
-
-    if (!p.startsWith('listings/')) {
-      p = 'listings/$p';
-    }
+    if (!p.startsWith('listings/')) p = 'listings/$p';
 
     try {
       final url = await _db.storage
@@ -237,21 +271,36 @@ class ListingsService {
     }
   }
 
+  Future<List<String?>> createSignedListingImageUrls(
+    List<String> paths, {
+    int expiresInSeconds = 3600,
+  }) async {
+    final out = <String?>[];
+    for (final p in paths) {
+      out.add(
+        await createSignedListingImageUrl(
+          path: p,
+          expiresInSeconds: expiresInSeconds,
+        ),
+      );
+    }
+    return out;
+  }
+
   Future<String?> signedFirstImageUrlFromListing(
     Map<String, dynamic> listing, {
     int expiresInSeconds = 3600,
   }) async {
     final paths = extractImagePaths(listing);
     if (paths.isEmpty) return null;
-
     return createSignedListingImageUrl(
       path: paths.first,
       expiresInSeconds: expiresInSeconds,
     );
   }
 
-  /// SELECT: ilanlar
-  /// ✅ Telefonu artık listing’den değil profiles.phone’dan alacağız (MVP güvenlik)
+  // ===================== Select =====================
+
   Future<List<Map<String, dynamic>>> fetchListings({
     ListingType? type,
     PricePeriod? pricePeriod,
@@ -262,9 +311,6 @@ class ListingsService {
     int limit = 30,
     String? status = 'published',
   }) async {
-    // ✅ FIX: FK adını açıkça belirtiyoruz
-    // Supabase, ilişkiyi bulamazsa bu şekilde bağlarız:
-    // profiles!listings_owner_id_fkey => listings.owner_id -> profiles.id
     var q = _db
         .from('listings')
         .select('*, profiles!listings_owner_id_fkey(full_name, phone)');
@@ -273,10 +319,7 @@ class ListingsService {
       q = q.eq('status', status.trim());
     }
 
-    if (type != null) {
-      q = q.eq('type', listingTypeToDb(type));
-    }
-
+    if (type != null) q = q.eq('type', listingTypeToDb(type));
     if (pricePeriod != null) {
       q = q.eq('price_period', pricePeriodToDb(pricePeriod));
     }
@@ -303,6 +346,42 @@ class ListingsService {
 
     final res = await q.order('created_at', ascending: false).limit(limit);
     return List<Map<String, dynamic>>.from(res);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchMyListings({int limit = 100}) async {
+    final user = _db.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    final res = await _db
+        .from('listings')
+        .select('*')
+        .eq('owner_id', user.id)
+        .order('created_at', ascending: false)
+        .limit(limit);
+
+    return List<Map<String, dynamic>>.from(res);
+  }
+
+  Future<void> republishListing(String listingId) async {
+    final user = _db.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    await _db
+        .from('listings')
+        .update({'status': 'published'})
+        .eq('id', listingId)
+        .eq('owner_id', user.id);
+  }
+
+  Future<void> deleteListing(String listingId) async {
+    final user = _db.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    await _db
+        .from('listings')
+        .delete()
+        .eq('id', listingId)
+        .eq('owner_id', user.id);
   }
 
   // ================= Helpers =================

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../widgets/app_page.dart';
 import 'auth_otp_verify_page.dart';
 
 class AuthOtpRequestPage extends StatefulWidget {
@@ -60,43 +59,47 @@ class _AuthOtpRequestPageState extends State<AuthOtpRequestPage> {
 
   @override
   Widget build(BuildContext context) {
-    return AppPage(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 12),
-          Text('Kayıt Ol', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 6),
-          Text(
-            'Emailini yaz, sana giriş/kayıt için bir kod göndereceğiz.',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 16),
-
-          TextField(
-            controller: _emailCtrl,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              border: OutlineInputBorder(),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Kayıt Ol')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 12),
+            Text('Kayıt Ol', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 6),
+            Text(
+              'Emailini yaz, sana giriş/kayıt için bir kod göndereceğiz.',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-          ),
+            const SizedBox(height: 16),
 
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 48,
-            child: FilledButton(
-              onPressed: _loading ? null : _sendCode,
-              child: Text(_loading ? 'Gönderiliyor...' : 'Kod Gönder'),
+            TextField(
+              controller: _emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+              ),
             ),
-          ),
 
-          const SizedBox(height: 10),
-          const Text(
-            'Mailine kod gelir (genelde 6 haneli). Kod gelmezse spam/junk klasörünü kontrol et.',
-            textAlign: TextAlign.center,
-          ),
-        ],
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 48,
+              child: FilledButton(
+                onPressed: _loading ? null : _sendCode,
+                child: Text(_loading ? 'Gönderiliyor...' : 'Kod Gönder'),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+            const Text(
+              'Mailine kod gelir (genelde 6 haneli). Kod gelmezse spam/junk klasörünü kontrol et.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

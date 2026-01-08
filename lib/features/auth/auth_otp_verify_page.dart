@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../widgets/app_page.dart';
-
 class AuthOtpVerifyPage extends StatefulWidget {
   final String email;
 
@@ -38,7 +36,7 @@ class _AuthOtpVerifyPageState extends State<AuthOtpVerifyPage> {
 
   void _startTimer() {
     _timer?.cancel();
-    setState(() => _secondsLeft = 60);
+    if (mounted) setState(() => _secondsLeft = 60);
 
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
@@ -116,64 +114,68 @@ class _AuthOtpVerifyPageState extends State<AuthOtpVerifyPage> {
   Widget build(BuildContext context) {
     final resendEnabled = _secondsLeft == 0 && !_loadingResend;
 
-    return AppPage(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 12),
-          Text(
-            'Kodu Doğrula',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Kod şu maile gitti:',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 4),
-          Text(widget.email, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 16),
-
-          TextField(
-            controller: _codeCtrl,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: '$_otpLength haneli kod',
-              border: const OutlineInputBorder(),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Kodu Doğrula')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 12),
+            Text(
+              'Kodu Doğrula',
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-          ),
+            const SizedBox(height: 6),
+            Text(
+              'Kod şu maile gitti:',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(widget.email, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 16),
 
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 48,
-            child: FilledButton(
-              onPressed: _loadingVerify ? null : _verify,
-              child: Text(
-                _loadingVerify ? 'Doğrulanıyor...' : 'Doğrula ve Devam Et',
+            TextField(
+              controller: _codeCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: '$_otpLength haneli kod',
+                border: const OutlineInputBorder(),
               ),
             ),
-          ),
 
-          const SizedBox(height: 12),
-
-          Row(
-            children: [
-              Expanded(
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 48,
+              child: FilledButton(
+                onPressed: _loadingVerify ? null : _verify,
                 child: Text(
-                  _secondsLeft > 0
-                      ? 'Tekrar kod için: $_secondsLeft sn'
-                      : 'Kod gelmediyse tekrar gönderebilirsin.',
+                  _loadingVerify ? 'Doğrulanıyor...' : 'Doğrula ve Devam Et',
                 ),
               ),
-              TextButton(
-                onPressed: resendEnabled ? _resendCode : null,
-                child: Text(
-                  _loadingResend ? 'Gönderiliyor...' : 'Tekrar Gönder',
+            ),
+
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _secondsLeft > 0
+                        ? 'Tekrar kod için: $_secondsLeft sn'
+                        : 'Kod gelmediyse tekrar gönderebilirsin.',
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+                TextButton(
+                  onPressed: resendEnabled ? _resendCode : null,
+                  child: Text(
+                    _loadingResend ? 'Gönderiliyor...' : 'Tekrar Gönder',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -19,6 +19,8 @@ class ListingDetailPage extends StatefulWidget {
 }
 
 class _ListingDetailPageState extends State<ListingDetailPage> {
+  static const Color kTurkuaz = Color(0xFF00B8D4); // ✅ İlanlar ile aynı renk
+
   final _service = ListingsService();
   final _pageCtrl = PageController();
 
@@ -240,7 +242,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     }
   }
 
-  // ✅ ŞİKAYETİ SUPABASE'E YAZ + kullanıcıya net feedback
   Future<void> _submitReport({
     required String reason,
     required String details,
@@ -271,13 +272,12 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
         'reporter_id': user.id,
         'reason': reason,
         'details': details.trim().isEmpty ? null : details.trim(),
-        // ✅ status kolonun yoksa bu satırı sil
         'status': 'new',
       });
 
       if (!mounted) return;
 
-      Navigator.pop(context); // ✅ bottom sheet kapat
+      Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -288,11 +288,10 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
       _reportTextCtrl.clear();
     } on PostgrestException catch (e) {
-      // ✅ Unique index varsa: aynı kullanıcı aynı ilana 1 kez şikayet edebilir
       final code = (e.code ?? '').toString();
       if (!mounted) return;
 
-      Navigator.pop(context); // ✅ sheet kapanır ki kullanıcı anlasın
+      Navigator.pop(context);
 
       if (code == '23505') {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -325,7 +324,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     }
   }
 
-  // ✅ ŞİKAYET BOTTOM SHEET
   void _reportListing() {
     _reportTextCtrl.clear();
 
@@ -358,7 +356,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-
                 _reportTile(
                   icon: Icons.report_gmailerrorred_outlined,
                   title: 'Sahte ilan / dolandırıcılık',
@@ -374,7 +371,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                   title: 'Diğer',
                   reason: 'other',
                 ),
-
                 const SizedBox(height: 6),
               ],
             ),
@@ -384,7 +380,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     );
   }
 
-  // ✅ Oklar çalışsın diye: trailing IconButton (istersen)
   Widget _reportTile({
     required IconData icon,
     required String title,
@@ -403,9 +398,9 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
             )
           : IconButton(
               icon: const Icon(Icons.chevron_right),
-              onPressed: _reportLoading ? null : send, // ✅ ok tıklanır
+              onPressed: _reportLoading ? null : send,
             ),
-      onTap: _reportLoading ? null : send, // ✅ satır da tıklanır
+      onTap: _reportLoading ? null : send,
     );
   }
 
@@ -448,7 +443,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
               child: TextButton.icon(
                 onPressed: _reportListing,
                 icon: const Icon(Icons.report_gmailerrorred_outlined),
-                // ✅ bayrak yok
                 label: const Text('Şikayet'),
               ),
             ),
@@ -863,7 +857,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF14B8A6),
+        backgroundColor: kTurkuaz,
+        // ✅ İlanlar ile aynı renk
         foregroundColor: Colors.white,
         title: const Text('İlan Detayı'),
         centerTitle: true,
@@ -875,7 +870,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
           IconButton(
             tooltip: 'Şikayet Et',
             onPressed: _reportListing,
-            icon: const Icon(Icons.report_outlined), // ✅ bayrak yok
+            icon: const Icon(Icons.report_outlined),
           ),
           IconButton(
             tooltip: 'Foto yenile',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/widgets/app_theme.dart';
 import 'splash_page.dart';
 
 Future<void> main() async {
@@ -22,9 +23,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Ev Arkadaşım',
-      theme: ThemeData(useMaterial3: true),
+      theme: AppTheme.light(),
 
-      // ✅ builder kaldırıldı (Splash dahil her şeyi bozmasın)
+      // ✅ Splash bozulmaz
       home: const SplashPage(),
     );
   }
