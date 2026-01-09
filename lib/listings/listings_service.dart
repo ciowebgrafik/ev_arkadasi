@@ -31,9 +31,33 @@ class ListingsService {
     return cleaned;
   }
 
-  // ✅ TR için basit normalize (İ/i I/ı)
+  // ✅ TR normalize: İ/ı/I sorunlarını düzelt + boşlukları toparla
+  // Amaç: arama ve filtrelerde tutarlılık
   String _norm(String s) {
-    return s.trim().toLowerCase().replaceAll('İ', 'i').replaceAll('I', 'i');
+    var t = s.trim();
+    if (t.isEmpty) return '';
+
+    // Türkçe özel harfleri normalize et
+    // NOT: toLowerCase() öncesinde İ/I düzeltmesi yapıyoruz
+    t = t.replaceAll('İ', 'i').replaceAll('I', 'ı');
+
+    // küçük harf
+    t = t.toLowerCase();
+
+    // kalan Türkçe karakterleri "yakın" karşılığa çek (opsiyonel ama aramayı güçlendirir)
+    // örn: Ş->s, Ğ->g, Ç->c, Ö->o, Ü->u, ı->i
+    t = t
+        .replaceAll('ş', 's')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ç', 'c')
+        .replaceAll('ö', 'o')
+        .replaceAll('ü', 'u')
+        .replaceAll('ı', 'i');
+
+    // fazla boşlukları tek boşluğa indir
+    t = t.replaceAll(RegExp(r'\s+'), ' ');
+
+    return t;
   }
 
   // ------------------ CRUD ------------------
@@ -324,8 +348,11 @@ class ListingsService {
       q = q.eq('price_period', pricePeriodToDb(pricePeriod));
     }
 
+    // ✅ şehir/ilçe filtrelerini TR normalize ile arat
     if (city != null && city.trim().isNotEmpty) {
       final c = _norm(city);
+      // NOT: city kolonunda asıl değer "Adana" gibi durur,
+      // ilike case-insensitive olduğu için %c% yeterli (norm sadece sağlamlaştırma)
       q = q.ilike('city', '%$c%');
     }
 

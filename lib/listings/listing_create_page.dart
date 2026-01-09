@@ -122,6 +122,48 @@ extension BoostPlanX on BoostPlan {
   }
 }
 
+/// =======================
+/// ✅ City/District Models
+/// =======================
+class _CityRow {
+  final int id;
+  final String name;
+  final String slug;
+
+  const _CityRow({required this.id, required this.name, required this.slug});
+
+  static _CityRow fromJson(Map<String, dynamic> j) {
+    return _CityRow(
+      id: (j['id'] as num).toInt(),
+      name: (j['name'] ?? '').toString(),
+      slug: (j['slug'] ?? '').toString(),
+    );
+  }
+}
+
+class _DistrictRow {
+  final int id;
+  final int cityId;
+  final String name;
+  final String slug;
+
+  const _DistrictRow({
+    required this.id,
+    required this.cityId,
+    required this.name,
+    required this.slug,
+  });
+
+  static _DistrictRow fromJson(Map<String, dynamic> j) {
+    return _DistrictRow(
+      id: (j['id'] as num).toInt(),
+      cityId: (j['city_id'] as num).toInt(),
+      name: (j['name'] ?? '').toString(),
+      slug: (j['slug'] ?? '').toString(),
+    );
+  }
+}
+
 class ListingCreatePage extends StatefulWidget {
   const ListingCreatePage({super.key, this.editListing});
 
@@ -141,8 +183,8 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
 
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  final _cityCtrl = TextEditingController();
-  final _districtCtrl = TextEditingController();
+  final _cityCtrl = TextEditingController(); // dropdown seçimiyle dolacak
+  final _districtCtrl = TextEditingController(); // dropdown seçimiyle dolacak
   final _priceCtrl = TextEditingController();
 
   bool _billsIncluded = false; // sadece roommate
@@ -189,15 +231,44 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
   // editte silinen eski pathler (storage için)
   final List<String> _removedExistingPaths = [];
 
+  // ===========================
+  // ✅ City / District dropdown state
+  // ===========================
+  bool _loadingCities = false;
+  bool _loadingDistricts = false;
+  String? _locError;
+
+  List<_CityRow> _cities = [];
+  List<_DistrictRow> _districts = [];
+
+  int? _selectedCityId;
+  int? _selectedDistrictId;
+
+  // Edit prefill (ID varsa önce onu kullan)
+  int? _initialCityId;
+  int? _initialDistrictId;
+  String _initialCityName = '';
+  String _initialDistrictName = '';
+
   @override
   void initState() {
     super.initState();
     _loadMyPhone();
     _initEditIfNeeded();
+    _loadCities();
   }
 
   bool get _isBasicOtherType =>
       _type != ListingType.roommate && _type != ListingType.item;
+
+  int? _asInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    return int.tryParse(s);
+  }
 
   void _initEditIfNeeded() {
     final l = widget.editListing;
@@ -207,8 +278,17 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
 
     _titleCtrl.text = (l['title'] ?? '').toString();
     _descCtrl.text = (l['description'] ?? '').toString();
+
+    // ✅ Yeni: ID varsa al
+    _initialCityId = _asInt(l['city_id']);
+    _initialDistrictId = _asInt(l['district_id']);
+
+    // ✅ Eski: isimler (fallback + arama için hâlâ tutuyoruz)
     _cityCtrl.text = (l['city'] ?? '').toString();
     _districtCtrl.text = (l['district'] ?? '').toString();
+
+    _initialCityName = _cityCtrl.text.trim();
+    _initialDistrictName = _districtCtrl.text.trim();
 
     final price = l['price'];
     if (price != null) _priceCtrl.text = price.toString();
@@ -301,6 +381,136 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     } finally {
       if (mounted) setState(() => _loadingPhone = false);
     }
+  }
+
+  // ===========================
+  // ✅ Load cities/districts
+  // ===========================
+  Future<void> _loadCities() async {
+    setState(() {
+      _loadingCities = true;
+      _locError = null;
+    });
+
+    try {
+      final sb = Supabase.instance.client;
+      final res = await sb
+          .from('cities')
+          .select('id,name,slug')
+          .order('id', ascending: true);
+
+      _cities = (res as List)
+          .map((e) => _CityRow.fromJson((e as Map).cast<String, dynamic>()))
+          .toList();
+
+      // ✅ Edit prefill: önce ID ile
+      if (widget.isEdit) {
+        if (_initialCityId != null) {
+          final exists = _cities.any((c) => c.id == _initialCityId);
+          if (exists) {
+            _selectedCityId = _initialCityId;
+            final city = _cities.firstWhere((c) => c.id == _selectedCityId);
+            _cityCtrl.text = city.name;
+
+            await _loadDistricts(_selectedCityId!);
+
+            if (_initialDistrictId != null &&
+                _districts.any((d) => d.id == _initialDistrictId)) {
+              _selectedDistrictId = _initialDistrictId;
+              final d = _districts.firstWhere(
+                (x) => x.id == _selectedDistrictId,
+              );
+              _districtCtrl.text = d.name;
+            }
+          }
+        }
+
+        // ✅ Eğer ID yoksa (eski ilan), isimden eşle
+        if (_selectedCityId == null && _initialCityName.trim().isNotEmpty) {
+          final nameLower = _initialCityName.trim().toLowerCase();
+          final foundCity = _cities.firstWhere(
+            (c) => c.name.trim().toLowerCase() == nameLower,
+            orElse: () => const _CityRow(id: -1, name: '', slug: ''),
+          );
+          if (foundCity.id != -1) {
+            _selectedCityId = foundCity.id;
+            _cityCtrl.text = foundCity.name;
+            await _loadDistricts(foundCity.id);
+
+            final distLower = _initialDistrictName.trim().toLowerCase();
+            if (distLower.isNotEmpty) {
+              final foundDist = _districts.firstWhere(
+                (d) => d.name.trim().toLowerCase() == distLower,
+                orElse: () =>
+                    const _DistrictRow(id: -1, cityId: -1, name: '', slug: ''),
+              );
+              if (foundDist.id != -1) {
+                _selectedDistrictId = foundDist.id;
+                _districtCtrl.text = foundDist.name;
+              }
+            }
+          }
+        }
+      }
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) setState(() => _locError = 'Şehirler yüklenemedi: $e');
+    } finally {
+      if (mounted) setState(() => _loadingCities = false);
+    }
+  }
+
+  Future<void> _loadDistricts(int cityId) async {
+    setState(() {
+      _loadingDistricts = true;
+      _locError = null;
+      _districts = [];
+      _selectedDistrictId = null;
+      _districtCtrl.text = '';
+    });
+
+    try {
+      final sb = Supabase.instance.client;
+      final res = await sb
+          .from('districts')
+          .select('id,city_id,name,slug')
+          .eq('city_id', cityId)
+          .order('name', ascending: true);
+
+      _districts = (res as List)
+          .map((e) => _DistrictRow.fromJson((e as Map).cast<String, dynamic>()))
+          .toList();
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) setState(() => _locError = 'İlçeler yüklenemedi: $e');
+    } finally {
+      if (mounted) setState(() => _loadingDistricts = false);
+    }
+  }
+
+  void _onCityChanged(int? cityId) async {
+    if (cityId == null) return;
+
+    final city = _cities.firstWhere((c) => c.id == cityId);
+    setState(() {
+      _selectedCityId = cityId;
+      _cityCtrl.text = city.name; // ✅ isim (arama/filtre uyumluluğu)
+      _districtCtrl.text = '';
+      _selectedDistrictId = null;
+    });
+
+    await _loadDistricts(cityId);
+  }
+
+  void _onDistrictChanged(int? districtId) {
+    if (districtId == null) return;
+    final d = _districts.firstWhere((x) => x.id == districtId);
+    setState(() {
+      _selectedDistrictId = districtId;
+      _districtCtrl.text = d.name; // ✅ isim (arama/filtre uyumluluğu)
+    });
   }
 
   @override
@@ -427,14 +637,16 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
 
   // ===========================
   // ✅ SUPABASE DIRECT SAVE
-  // ✅ RLS FIX: owner_id ekledik + update'e owner filter
+  // ✅ Konum: city_id + district_id (ID) + city/district (isim) birlikte
   // ===========================
   Future<String> _supabaseCreateListing({
     required ListingType type,
     required String title,
     String? description,
-    String? city,
-    String? district,
+    required int cityId,
+    required int districtId,
+    required String cityName,
+    required String districtName,
     double? price,
     required PricePeriod pricePeriod,
     required bool billsIncluded,
@@ -450,12 +662,16 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     if (user == null) throw Exception('Giriş yapılmamış.');
 
     final data = <String, dynamic>{
-      'owner_id': user.id, // ✅ FIX (RLS)
+      'owner_id': user.id,
       'type': listingTypeToDb(type),
       'title': title,
       'description': description,
-      'city': city,
-      'district': district,
+      // ✅ Konum (ID + isim)
+      'city_id': cityId,
+      'district_id': districtId,
+      'city': cityName,
+      'district': districtName,
+
       'price': price,
       'price_period': pricePeriodToDb(pricePeriod),
       'bills_included': billsIncluded,
@@ -476,8 +692,10 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     required ListingType type,
     required String title,
     String? description,
-    String? city,
-    String? district,
+    required int cityId,
+    required int districtId,
+    required String cityName,
+    required String districtName,
     double? price,
     required PricePeriod pricePeriod,
     required bool billsIncluded,
@@ -496,8 +714,12 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       'type': listingTypeToDb(type),
       'title': title,
       'description': description,
-      'city': city,
-      'district': district,
+      // ✅ Konum (ID + isim)
+      'city_id': cityId,
+      'district_id': districtId,
+      'city': cityName,
+      'district': districtName,
+
       'price': price,
       'price_period': pricePeriodToDb(pricePeriod),
       'bills_included': billsIncluded,
@@ -514,12 +736,22 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         .from('listings')
         .update(data)
         .eq('id', listingId)
-        .eq('owner_id', user.id); // ✅ FIX (RLS)
+        .eq('owner_id', user.id);
   }
 
   Future<void> _save({required bool publish}) async {
     if (_titleCtrl.text.trim().isEmpty) {
       _snack('Başlık zorunlu.');
+      return;
+    }
+
+    // ✅ Konum zorunlu
+    if (_selectedCityId == null) {
+      _snack('Lütfen şehir seç.');
+      return;
+    }
+    if (_selectedDistrictId == null) {
+      _snack('Lütfen ilçe seç.');
       return;
     }
 
@@ -551,6 +783,11 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
           ? _pricePeriod
           : PricePeriod.once;
 
+      final cityId = _selectedCityId!;
+      final districtId = _selectedDistrictId!;
+      final cityName = _cityCtrl.text.trim();
+      final districtName = _districtCtrl.text.trim();
+
       // ================= EDIT =================
       if (widget.isEdit) {
         final id = _editId;
@@ -563,10 +800,10 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
           description: _descCtrl.text.trim().isEmpty
               ? null
               : _descCtrl.text.trim(),
-          city: _cityCtrl.text.trim().isEmpty ? null : _cityCtrl.text.trim(),
-          district: _districtCtrl.text.trim().isEmpty
-              ? null
-              : _districtCtrl.text.trim(),
+          cityId: cityId,
+          districtId: districtId,
+          cityName: cityName,
+          districtName: districtName,
           price: price,
           pricePeriod: finalPeriod,
           billsIncluded: (_type == ListingType.roommate)
@@ -631,10 +868,10 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         description: _descCtrl.text.trim().isEmpty
             ? null
             : _descCtrl.text.trim(),
-        city: _cityCtrl.text.trim().isEmpty ? null : _cityCtrl.text.trim(),
-        district: _districtCtrl.text.trim().isEmpty
-            ? null
-            : _districtCtrl.text.trim(),
+        cityId: cityId,
+        districtId: districtId,
+        cityName: cityName,
+        districtName: districtName,
         price: price,
         pricePeriod: finalPeriod,
         billsIncluded: (_type == ListingType.roommate) ? _billsIncluded : false,
@@ -646,7 +883,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         status: status,
       );
 
-      // foto upload (zaten en az 2 zorunlu)
+      // foto upload
       final xfiles = _pickedImages.map((e) => e.file).toList();
       final paths = await _service.uploadListingImages(
         listingId: listingId,
@@ -925,6 +1162,48 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     ]);
   }
 
+  Widget _locationSection() {
+    return _card('Konum', [
+      if (_locError != null) ...[
+        Text(_locError!, style: const TextStyle(color: Colors.red)),
+        const SizedBox(height: 8),
+      ],
+      DropdownButtonFormField<int>(
+        value: _selectedCityId,
+        decoration: const InputDecoration(labelText: 'Şehir *'),
+        isExpanded: true,
+        items: _cities
+            .map(
+              (c) => DropdownMenuItem<int>(
+                value: c.id,
+                child: Text(c.name), // ✅ profesyonel: sadece isim
+              ),
+            )
+            .toList(),
+        onChanged: (_loadingCities || _loading)
+            ? null
+            : (v) => _onCityChanged(v),
+      ),
+      const SizedBox(height: 10),
+      DropdownButtonFormField<int>(
+        value: _selectedDistrictId,
+        decoration: InputDecoration(
+          labelText: _selectedCityId == null ? 'Önce şehir seç' : 'İlçe *',
+        ),
+        isExpanded: true,
+        items: _districts
+            .map((d) => DropdownMenuItem<int>(value: d.id, child: Text(d.name)))
+            .toList(),
+        onChanged: (_selectedCityId == null || _loadingDistricts || _loading)
+            ? null
+            : (v) => _onDistrictChanged(v),
+      ),
+      const SizedBox(height: 8),
+      if (_loadingCities || _loadingDistricts)
+        const LinearProgressIndicator(minHeight: 2),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final phoneText = _loadingPhone
@@ -1004,17 +1283,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             _photoManagementSection(),
             _existingImagesSection(),
             _newImagesSection(),
-            _card('Konum', [
-              TextField(
-                controller: _cityCtrl,
-                decoration: const InputDecoration(labelText: 'Şehir'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _districtCtrl,
-                decoration: const InputDecoration(labelText: 'İlçe'),
-              ),
-            ]),
+            _locationSection(),
             _card('Fiyat', [
               TextField(
                 controller: _priceCtrl,
