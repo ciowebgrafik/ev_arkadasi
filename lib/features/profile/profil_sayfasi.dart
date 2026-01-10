@@ -19,6 +19,7 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
   String _fullName = '';
   String _phone = '';
   String _city = '';
+  String _district = ''; // ✅ yeni
   String _bio = '';
   String _email = '';
   String _avatarSignedUrl = '';
@@ -37,6 +38,7 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
           .from('avatars')
           .createSignedUrl(path.trim(), 60 * 60);
 
+      // cache bust (foto güncellenince anında değişsin)
       final cb = DateTime.now().millisecondsSinceEpoch;
       url = '$url${url.contains('?') ? '&' : '?'}cb=$cb';
       return url;
@@ -55,15 +57,17 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
     });
 
     try {
+      // ✅ district eklendi
       final data = await supabase
           .from('profiles')
-          .select('full_name, phone, city, bio, avatar_path')
+          .select('full_name, phone, city, district, bio, avatar_path')
           .eq('id', user.id)
           .maybeSingle();
 
       final fullName = (data?['full_name'] ?? '').toString().trim();
       final phone = (data?['phone'] ?? '').toString().trim();
       final city = (data?['city'] ?? '').toString().trim();
+      final district = (data?['district'] ?? '').toString().trim();
       final bio = (data?['bio'] ?? '').toString().trim();
       final avatarPath = (data?['avatar_path'] ?? '').toString().trim();
 
@@ -74,6 +78,7 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
         _fullName = fullName;
         _phone = phone;
         _city = city;
+        _district = district;
         _bio = bio;
         _email = user.email ?? '';
         _avatarPath = avatarPath;
@@ -103,10 +108,14 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
         ? NetworkImage(_avatarSignedUrl)
         : null;
 
+    // ✅ Şehir + İlçe tek satır gösterim
+    final locationText = [
+      _city.trim(),
+      _district.trim(),
+    ].where((e) => e.isNotEmpty).join(' / ');
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F9),
-
-      // ✅ FOTOĞRAFTAKİ GİBİ: GERİ OK + ORTADA PROFİL
       appBar: AppBar(
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
@@ -116,15 +125,13 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
           'Profil',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
-        // hafif alt çizgi (foto gibi)
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: Colors.black12),
         ),
       ),
-
       body: SafeArea(
-        top: false, // AppBar zaten safe area
+        top: false,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : (_error.isNotEmpty)
@@ -159,7 +166,6 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // ✅ Üst kart (foto + isim + mail)
                                 Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
@@ -218,7 +224,6 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                     ],
                                   ),
                                 ),
-
                                 const SizedBox(height: 12),
 
                                 _infoCard(
@@ -228,10 +233,12 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                 ),
                                 const SizedBox(height: 10),
 
+                                // ✅ Konum: Şehir + İlçe
                                 _infoCard(
-                                  icon: Icons.location_city,
-                                  label: 'Şehir',
-                                  value: _city,
+                                  icon: Icons.location_on_outlined,
+                                  label: 'Konum',
+                                  value: locationText,
+                                  maxLines: 2,
                                 ),
                                 const SizedBox(height: 10),
 
@@ -241,7 +248,6 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                   value: _bio,
                                   maxLines: 3,
                                 ),
-
                                 const SizedBox(height: 14),
 
                                 SizedBox(
@@ -253,7 +259,6 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                     label: const Text('Profili Düzenle'),
                                   ),
                                 ),
-
                                 const SizedBox(height: 10),
 
                                 Text(

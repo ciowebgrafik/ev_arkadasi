@@ -12,11 +12,12 @@ class ProfilDuzenleSayfasi extends StatefulWidget {
 }
 
 class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
+  static const Color kTurkuaz = Color(0xFF00B8D4);
+
   final supabase = Supabase.instance.client;
 
   final _adController = TextEditingController();
   final _telefonController = TextEditingController();
-  final _sehirController = TextEditingController();
   final _bioController = TextEditingController();
 
   bool _loading = true;
@@ -24,24 +25,122 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
   Uint8List? _avatarBytes;
   String _existingAvatarPath = '';
-
-  // signed url cache (her build’de tekrar istek atmasın)
   String? _cachedSignedUrl;
+
+  // ✅ Mevcut profil değerleri (DB’den)
+  String _initialCityName = '';
+  String _initialDistrictName = '';
+
+  // ✅ Dropdown seçimleri
+  int? _selectedCityId;
+  String? _selectedCityName;
+  String? _selectedDistrictName;
+
+  // ✅ DB’den listeler
+  bool _loadingCities = true;
+  bool _loadingDistricts = false;
+
+  // city item: {id:int, name:String}
+  List<Map<String, dynamic>> _cities = [];
+  List<String> _districts = [];
 
   @override
   void initState() {
     super.initState();
-    _profiliYukle();
+    _initLoad();
   }
 
   @override
   void dispose() {
     _adController.dispose();
     _telefonController.dispose();
-    _sehirController.dispose();
     _bioController.dispose();
     super.dispose();
   }
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  Future<void> _initLoad() async {
+    // 1) şehirleri yükle
+    await _loadCities();
+    // 2) profili yükle (seçimleri set edecek)
+    await _profiliYukle();
+  }
+
+  // ===================== DB LOADERS =====================
+
+  Future<void> _loadCities() async {
+    setState(() => _loadingCities = true);
+
+    try {
+      final res = await supabase
+          .from('cities')
+          .select('id,name')
+          .order('name', ascending: true);
+
+      final list = (res as List)
+          .map(
+            (e) => {'id': e['id'], 'name': (e['name'] ?? '').toString().trim()},
+          )
+          .where(
+            (m) => m['id'] != null && (m['name'] as String).trim().isNotEmpty,
+          )
+          .toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        _cities = list;
+        _loadingCities = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingCities = false);
+      _snack('Şehirler çekilemedi: $e');
+    }
+  }
+
+  Future<void> _loadDistrictsOfCityId(int cityId) async {
+    setState(() {
+      _loadingDistricts = true;
+      _districts = [];
+      _selectedDistrictName = null;
+    });
+
+    try {
+      final res = await supabase
+          .from('districts')
+          .select('name')
+          .eq('city_id', cityId)
+          .order('name', ascending: true);
+
+      final list =
+          (res as List)
+              .map((e) => (e['name'] ?? '').toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
+
+      if (!mounted) return;
+
+      setState(() {
+        _districts = list;
+        _loadingDistricts = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingDistricts = false);
+      _snack('İlçeler çekilemedi: $e');
+    }
+  }
+
+  // ===================== PROFILE LOAD =====================
 
   Future<void> _profiliYukle() async {
     final user = supabase.auth.currentUser;
@@ -55,43 +154,80 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     try {
       final data = await supabase
           .from('profiles')
-          .select('full_name, phone, city, bio, avatar_path')
+          .select('full_name, phone, city, district, bio, avatar_path')
           .eq('id', user.id)
           .maybeSingle();
 
       _adController.text = (data?['full_name'] ?? '').toString();
       _telefonController.text = (data?['phone'] ?? '').toString();
-      _sehirController.text = (data?['city'] ?? '').toString();
       _bioController.text = (data?['bio'] ?? '').toString();
       _existingAvatarPath = (data?['avatar_path'] ?? '').toString();
+
+      _initialCityName = (data?['city'] ?? '').toString().trim();
+      _initialDistrictName = (data?['district'] ?? '').toString().trim();
 
       if (_existingAvatarPath.trim().isNotEmpty) {
         _cachedSignedUrl = await _signedAvatarUrl(_existingAvatarPath);
       }
+
+      // ✅ şehir ismine göre cityId bul
+      if (_initialCityName.isNotEmpty && _cities.isNotEmpty) {
+        final row = _cities.firstWhere(
+          (x) =>
+              (x['name'] ?? '').toString().trim().toLowerCase() ==
+              _initialCityName.toLowerCase(),
+          orElse: () => const {'id': null, 'name': ''},
+        );
+
+        final idRaw = row['id'];
+        final id = (idRaw is int)
+            ? idRaw
+            : int.tryParse(idRaw?.toString() ?? '');
+
+        if (id != null) {
+          _selectedCityId = id;
+          _selectedCityName = (row['name'] ?? '').toString().trim();
+
+          // ✅ ilçeleri çek
+          await _loadDistrictsOfCityId(id);
+
+          // ✅ ilçeyi seçili getir (varsa listede)
+          if (_initialDistrictName.isNotEmpty &&
+              _districts.any(
+                (d) => d.toLowerCase() == _initialDistrictName.toLowerCase(),
+              )) {
+            _selectedDistrictName = _districts.firstWhere(
+              (d) => d.toLowerCase() == _initialDistrictName.toLowerCase(),
+              orElse: () => _initialDistrictName,
+            );
+          }
+        }
+      }
+
+      if (!mounted) return;
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Profil okunamadı: $e')));
+      _snack('Profil okunamadı: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  // ===================== PHOTO =====================
+
   Future<void> _fotoSec() async {
     final picker = ImagePicker();
-
     final picked = await picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 70,
       maxWidth: 1024,
     );
 
-    if (picked != null) {
-      final bytes = await picked.readAsBytes();
-      if (!mounted) return;
-      setState(() => _avatarBytes = bytes);
-    }
+    if (picked == null) return;
+
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+    setState(() => _avatarBytes = bytes);
   }
 
   Future<String?> _fotoYuklePath(String uid) async {
@@ -120,11 +256,11 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     final url = await supabase.storage
         .from('avatars')
         .createSignedUrl(path, 60 * 60);
-
-    // cache bust (foto güncellenince anında değişsin)
     final bust = DateTime.now().millisecondsSinceEpoch;
     return '$url${url.contains('?') ? '&' : '?'}cb=$bust';
   }
+
+  // ===================== SAVE =====================
 
   Future<void> _kaydet() async {
     final user = supabase.auth.currentUser;
@@ -132,13 +268,13 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
     final fullName = _adController.text.trim();
     final phone = _telefonController.text.trim();
-    final city = _sehirController.text.trim();
     final bio = _bioController.text.trim();
 
-    if (fullName.isEmpty || phone.isEmpty || city.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ad Soyad / Telefon / Şehir boş olamaz')),
-      );
+    final city = (_selectedCityName ?? _initialCityName).trim();
+    final district = (_selectedDistrictName ?? _initialDistrictName).trim();
+
+    if (fullName.isEmpty || phone.isEmpty || city.isEmpty || district.isEmpty) {
+      _snack('Ad Soyad / Telefon / Şehir / İlçe boş olamaz');
       return;
     }
 
@@ -151,7 +287,8 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
         'full_name': fullName,
         'phone': phone,
         'city': city,
-        'bio': bio,
+        'district': district,
+        'bio': bio.isEmpty ? null : bio,
         'updated_at': DateTime.now().toIso8601String(),
       };
 
@@ -162,15 +299,110 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
       await supabase.from('profiles').update(updateMap).eq('id', user.id);
 
       if (!mounted) return;
-      Navigator.pop(context, true); // ProfilSayfasi bunu yakalayacak
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Kaydetme hatası: $e')));
+      _snack('Kaydetme hatası: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  // ===================== UI =====================
+
+  Widget _cityDropdown() {
+    if (_loadingCities) {
+      return const SizedBox(
+        height: 56,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+
+    return DropdownButtonFormField<int>(
+      value: _selectedCityId,
+      isExpanded: true,
+      items: _cities
+          .map((c) {
+            final idRaw = c['id'];
+            final id = (idRaw is int)
+                ? idRaw
+                : int.tryParse(idRaw?.toString() ?? '');
+            final name = (c['name'] ?? '').toString();
+            if (id == null) return null;
+            return DropdownMenuItem<int>(
+              value: id,
+              child: Text(name, overflow: TextOverflow.ellipsis),
+            );
+          })
+          .whereType<DropdownMenuItem<int>>()
+          .toList(),
+      onChanged: _saving
+          ? null
+          : (id) async {
+              if (id == null) return;
+
+              // name’i bul
+              final row = _cities.firstWhere((x) {
+                final rid = (x['id'] is int)
+                    ? x['id'] as int
+                    : int.tryParse('${x['id']}');
+                return rid == id;
+              }, orElse: () => const {'id': null, 'name': ''});
+
+              final name = (row['name'] ?? '').toString().trim();
+
+              setState(() {
+                _selectedCityId = id;
+                _selectedCityName = name;
+                _selectedDistrictName = null;
+                _districts = [];
+              });
+
+              await _loadDistrictsOfCityId(id);
+            },
+      decoration: const InputDecoration(
+        labelText: 'Şehir',
+        border: OutlineInputBorder(),
+      ),
+    );
+  }
+
+  Widget _districtDropdown() {
+    final disabled = _saving || _selectedCityId == null;
+
+    if (_loadingDistricts) {
+      return const SizedBox(
+        height: 56,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+
+    return DropdownButtonFormField<String>(
+      value:
+          (_selectedDistrictName != null &&
+              _selectedDistrictName!.trim().isNotEmpty)
+          ? _selectedDistrictName
+          : null,
+      isExpanded: true,
+      items: _districts
+          .map(
+            (d) => DropdownMenuItem<String>(
+              value: d,
+              child: Text(d, overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(),
+      onChanged: disabled
+          ? null
+          : (v) => setState(() => _selectedDistrictName = v),
+      decoration: InputDecoration(
+        labelText: 'İlçe',
+        border: const OutlineInputBorder(),
+        hintText: (_selectedCityId == null)
+            ? 'Önce şehir seç'
+            : (_districts.isEmpty ? 'İlçe bulunamadı' : null),
+      ),
+    );
   }
 
   Widget _buildBody(BuildContext context) {
@@ -203,6 +435,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
               TextField(
                 controller: _adController,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'Ad Soyad',
                   border: OutlineInputBorder(),
@@ -212,6 +445,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
               TextField(
                 controller: _telefonController,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'Telefon',
                   border: OutlineInputBorder(),
@@ -220,13 +454,10 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
               ),
               const SizedBox(height: 12),
 
-              TextField(
-                controller: _sehirController,
-                decoration: const InputDecoration(
-                  labelText: 'Şehir',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+              _cityDropdown(),
+              const SizedBox(height: 12),
+
+              _districtDropdown(),
               const SizedBox(height: 12),
 
               TextField(
@@ -243,6 +474,13 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kTurkuaz,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   onPressed: _saving ? null : _kaydet,
                   child: Text(_saving ? 'Kaydediliyor...' : 'Kaydet'),
                 ),
@@ -264,14 +502,22 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
   @override
   Widget build(BuildContext context) {
-    // Material garantisi (TextField için şart)
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: kTurkuaz,
+        foregroundColor: Colors.white,
         title: const Text(
           'Profil Düzenle',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'Yenile',
+            onPressed: _saving ? null : _initLoad,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
       body: Material(
         child: _loading

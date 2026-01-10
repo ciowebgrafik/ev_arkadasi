@@ -4,6 +4,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'chat_page.dart'; // ✅ ChatPage(chatId, otherUserId, otherUserName, listingTitle)
+import 'chat_service.dart'; // ✅ getOrCreateConversation
 import 'listing_enums.dart';
 import 'listing_preferences_section.dart';
 import 'listing_rules_section.dart';
@@ -19,10 +21,13 @@ class ListingDetailPage extends StatefulWidget {
 }
 
 class _ListingDetailPageState extends State<ListingDetailPage> {
-  static const Color kTurkuaz = Color(0xFF00B8D4); // ✅ İlanlar ile aynı renk
+  static const Color kTurkuaz = Color(0xFF00B8D4);
 
   final _service = ListingsService();
   final _pageCtrl = PageController();
+
+  // ✅ Chat service (YENİ)
+  final _chatService = ChatService();
 
   int _index = 0;
   bool _loadingImages = true;
@@ -30,6 +35,9 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
   bool _isFav = false;
   bool _favLoading = true;
+
+  // ✅ Chat loading
+  bool _chatLoading = false;
 
   List<String> _paths = [];
   List<String> _signedUrls = [];
@@ -45,7 +53,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     _loadFavoriteStatus();
   }
 
-  // ✅ ASIL FIX: Sayfa başka ilana aynı state ile geçerse resetle & yeniden yükle
   @override
   void didUpdateWidget(covariant ListingDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -60,6 +67,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
       _reportLoading = false;
       _reportTextCtrl.clear();
+
+      _chatLoading = false;
 
       _loadFavoriteStatus();
       _loadImages();
@@ -126,6 +135,93 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('WhatsApp açılamadı.')));
+    }
+  }
+
+  // ---------------------- ✅ Uygulama içi Chat ----------------------
+
+  String _ownerIdOfListing(Map<String, dynamic> it) {
+    // ✅ en sağlam alan: owner_id
+    final a = (it['owner_id'] ?? '').toString().trim();
+    if (a.isNotEmpty) return a;
+
+    // ✅ bazen user_id olur
+    final b = (it['user_id'] ?? '').toString().trim();
+    if (b.isNotEmpty) return b;
+
+    // ✅ profiles join varsa
+    final p = it['profiles'];
+    if (p is Map) {
+      final pid = (p['id'] ?? '').toString().trim();
+      if (pid.isNotEmpty) return pid;
+    }
+    if (p is List && p.isNotEmpty && p.first is Map) {
+      final pid = ((p.first as Map)['id'] ?? '').toString().trim();
+      if (pid.isNotEmpty) return pid;
+    }
+
+    return '';
+  }
+
+  Future<void> _openChat() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mesaj için giriş yapmalısın.')),
+      );
+      return;
+    }
+
+    final listingId = _listingId();
+    final otherId = _ownerIdOfListing(widget.listing);
+
+    if (listingId.isEmpty || otherId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chat açılamadı: listing/owner id yok.')),
+      );
+      return;
+    }
+
+    if (otherId == user.id) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kendi ilanına mesaj atamazsın 😄')),
+      );
+      return;
+    }
+
+    if (_chatLoading) return;
+    setState(() => _chatLoading = true);
+
+    try {
+      // ✅ YENİ: getOrCreateConversation
+      final convId = await _chatService.getOrCreateConversation(
+        listingId: listingId,
+        otherUserId: otherId,
+      );
+
+      final otherName = _profileName(widget.listing);
+      final title = (widget.listing['title'] ?? '').toString().trim();
+
+      if (!mounted) return;
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatPage(
+            chatId: convId, // ✅ conversation id
+            otherUserId: otherId,
+            otherUserName: otherName.isEmpty ? 'Kullanıcı' : otherName,
+            listingTitle: title.isEmpty ? 'İlan' : title,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Chat açılamadı: $e')));
+    } finally {
+      if (mounted) setState(() => _chatLoading = false);
     }
   }
 
@@ -263,7 +359,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     }
 
     if (_reportLoading) return;
-
     setState(() => _reportLoading = true);
 
     try {
@@ -276,7 +371,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       });
 
       if (!mounted) return;
-
       Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -530,7 +624,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     return _clean((it['owner_name'] ?? '').toString());
   }
 
-  // ✅ FİYAT: roommate => periyotlu, diğer tüm türler => Tek Sefer
   String _fmtPrice(Map<String, dynamic> it) {
     final price = it['price'];
     final currency = (it['currency'] ?? 'TRY').toString();
@@ -565,7 +658,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       return '$cur$priceStr / $periodLabel';
     }
 
-    // ✅ item + transport + repair + local + cleaning + pet + daily_job => Tek Sefer
     return '$cur$priceStr (Tek Sefer)';
   }
 
@@ -837,8 +929,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     String typeLabel = typeStr;
 
     try {
-      typeEnum = listingTypeFromDb(typeStr); // ✅ yeni türler dahil
-      typeLabel = typeEnum.label; // ✅ TR label
+      typeEnum = listingTypeFromDb(typeStr);
+      typeLabel = typeEnum.label;
     } catch (_) {}
 
     final city = _clean(it['city'] ?? '');
@@ -868,7 +960,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     final createdAt = _fmtCreatedAt(it);
     final views = _views(it);
 
-    // ✅ jsonb güvenli map
     final rules = _safeMap(it['rules']);
     final preferences = _safeMap(it['preferences']);
 
@@ -994,6 +1085,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     ),
                   ),
                   const SizedBox(height: 14),
+
+                  // ✅ WhatsApp (kalsın)
                   SizedBox(
                     width: double.infinity,
                     height: 48,
@@ -1027,19 +1120,22 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Center(
+
+                  // ✅ Mesaj Gönder → UYGULAMA İÇİ CHAT
+                  SizedBox(
+                    width: double.infinity,
                     child: TextButton.icon(
-                      onPressed: _isValidWhatsappPhone(phone)
-                          ? () => _openWhatsApp(
-                              phone: phone,
-                              message:
-                                  'Merhaba, "${title.isEmpty ? "ilan" : title}" ilanınız hakkında mesaj atıyorum.',
+                      onPressed: _chatLoading ? null : _openChat,
+                      icon: _chatLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : null,
-                      icon: const Icon(Icons.chat_bubble_outline),
+                          : const Icon(Icons.chat_bubble_outline),
                       label: const Text(
                         'Mesaj Gönder',
-                        style: TextStyle(fontWeight: FontWeight.w600),
+                        style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
                   ),

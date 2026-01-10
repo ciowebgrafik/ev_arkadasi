@@ -44,6 +44,48 @@ extension ItemCategoryX on ItemCategory {
   }
 }
 
+/// =======================
+/// ✅ City/District Models (CreatePage ile aynı mantık)
+/// =======================
+class _CityRow {
+  final int id;
+  final String name;
+  final String slug;
+
+  const _CityRow({required this.id, required this.name, required this.slug});
+
+  static _CityRow fromJson(Map<String, dynamic> j) {
+    return _CityRow(
+      id: (j['id'] as num).toInt(),
+      name: (j['name'] ?? '').toString(),
+      slug: (j['slug'] ?? '').toString(),
+    );
+  }
+}
+
+class _DistrictRow {
+  final int id;
+  final int cityId;
+  final String name;
+  final String slug;
+
+  const _DistrictRow({
+    required this.id,
+    required this.cityId,
+    required this.name,
+    required this.slug,
+  });
+
+  static _DistrictRow fromJson(Map<String, dynamic> j) {
+    return _DistrictRow(
+      id: (j['id'] as num).toInt(),
+      cityId: (j['city_id'] as num).toInt(),
+      name: (j['name'] ?? '').toString(),
+      slug: (j['slug'] ?? '').toString(),
+    );
+  }
+}
+
 class ListingListPage extends StatefulWidget {
   const ListingListPage({
     super.key,
@@ -104,6 +146,19 @@ class _ListingListPageState extends State<ListingListPage> {
 
   bool get _isItemTypeSelected => _type == ListingType.item;
 
+  // ===========================
+  // ✅ City / District dropdown state (Filtre için)
+  // ===========================
+  bool _loadingCities = false;
+  bool _loadingDistricts = false;
+  String? _locError;
+
+  List<_CityRow> _cities = [];
+  List<_DistrictRow> _districts = [];
+
+  int? _selectedCityId;
+  int? _selectedDistrictId;
+
   @override
   void initState() {
     super.initState();
@@ -111,7 +166,7 @@ class _ListingListPageState extends State<ListingListPage> {
     // ✅ Menüden gelen başlangıç filtrelerini uygula
     _type = widget.initialType;
 
-    // başlangıç şehir/ilçe/q
+    // başlangıç şehir/ilçe/q (text olarak tutuluyor, dropdown açılınca eşleşecek)
     if ((widget.initialCity ?? '').trim().isNotEmpty) {
       _cityCtrl.text = widget.initialCity!.trim();
     }
@@ -131,6 +186,7 @@ class _ListingListPageState extends State<ListingListPage> {
       _itemCategory = null;
     }
 
+    _loadCities(); // ✅ filtre dropdown için şehirleri hazırla
     _load();
   }
 
@@ -140,6 +196,94 @@ class _ListingListPageState extends State<ListingListPage> {
     _districtCtrl.dispose();
     _qCtrl.dispose();
     super.dispose();
+  }
+
+  // ===========================
+  // ✅ Load cities/districts (Filtre)
+  // ===========================
+  Future<void> _loadCities() async {
+    setState(() {
+      _loadingCities = true;
+      _locError = null;
+    });
+
+    try {
+      final sb = Supabase.instance.client;
+      final res = await sb
+          .from('cities')
+          .select('id,name,slug')
+          .order('id', ascending: true);
+
+      _cities = (res as List)
+          .map((e) => _CityRow.fromJson((e as Map).cast<String, dynamic>()))
+          .toList();
+
+      // ✅ Eğer text olarak şehir/ilçe doluysa dropdown'a eşle
+      final cityName = _clean(_cityCtrl.text).toLowerCase();
+      if (cityName.isNotEmpty) {
+        final foundCity = _cities.firstWhere(
+          (c) => c.name.trim().toLowerCase() == cityName,
+          orElse: () => const _CityRow(id: -1, name: '', slug: ''),
+        );
+        if (foundCity.id != -1) {
+          _selectedCityId = foundCity.id;
+
+          // ilçeleri yükle
+          await _loadDistricts(foundCity.id);
+
+          final distName = _clean(_districtCtrl.text).toLowerCase();
+          if (distName.isNotEmpty) {
+            final foundDist = _districts.firstWhere(
+              (d) => d.name.trim().toLowerCase() == distName,
+              orElse: () =>
+                  const _DistrictRow(id: -1, cityId: -1, name: '', slug: ''),
+            );
+            if (foundDist.id != -1) {
+              _selectedDistrictId = foundDist.id;
+            }
+          }
+        }
+      }
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) setState(() => _locError = 'Şehirler yüklenemedi: $e');
+    } finally {
+      if (mounted) setState(() => _loadingCities = false);
+    }
+  }
+
+  Future<void> _loadDistricts(int cityId) async {
+    setState(() {
+      _loadingDistricts = true;
+      _locError = null;
+      _districts = [];
+      _selectedDistrictId = null;
+    });
+
+    try {
+      final sb = Supabase.instance.client;
+      final res = await sb
+          .from('districts')
+          .select('id,city_id,name,slug')
+          .eq('city_id', cityId)
+          .order('name', ascending: true);
+
+      _districts = (res as List)
+          .map((e) => _DistrictRow.fromJson((e as Map).cast<String, dynamic>()))
+          .toList();
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) setState(() => _locError = 'İlçeler yüklenemedi: $e');
+    } finally {
+      if (mounted) setState(() => _loadingDistricts = false);
+    }
+  }
+
+  Future<void> _ensureCitiesLoaded() async {
+    if (_cities.isNotEmpty) return;
+    await _loadCities();
   }
 
   // ---------------------- BOOST BADGE HELPERS ----------------------
@@ -319,12 +463,55 @@ class _ListingListPageState extends State<ListingListPage> {
   // ---------------------- TOP ACTIONS ----------------------
 
   Future<void> _openFilterSheet() async {
-    final tmpCity = TextEditingController(text: _cityCtrl.text);
-    final tmpDistrict = TextEditingController(text: _districtCtrl.text);
+    await _ensureCitiesLoaded();
 
+    // temp controllers (q yok burada, şehir/ilçe dropdown ile yönetilecek)
     ListingType? tmpType = _type;
     PricePeriod? tmpPeriod = _period;
     ItemCategory? tmpItemCat = _itemCategory;
+
+    // ✅ temp şehir/ilçe seçimi
+    int? tmpCityId = _selectedCityId;
+    int? tmpDistrictId = _selectedDistrictId;
+
+    // şehir adı/district adı text olarak da saklı (apply sırasında _cityCtrl/_districtCtrl dolduracağız)
+    String tmpCityName = _cityCtrl.text;
+    String tmpDistrictName = _districtCtrl.text;
+
+    // ✅ eğer text var ama id yoksa eşleştir (ilk açılış)
+    if (tmpCityId == null && _cities.isNotEmpty) {
+      final cityLower = _clean(tmpCityName).toLowerCase();
+      if (cityLower.isNotEmpty) {
+        final found = _cities.firstWhere(
+          (c) => c.name.trim().toLowerCase() == cityLower,
+          orElse: () => const _CityRow(id: -1, name: '', slug: ''),
+        );
+        if (found.id != -1) {
+          tmpCityId = found.id;
+          tmpCityName = found.name;
+          await _loadDistricts(found.id);
+        }
+      }
+    }
+
+    if (tmpCityId != null && _districts.isEmpty) {
+      await _loadDistricts(tmpCityId);
+    }
+
+    if (tmpDistrictId == null && tmpCityId != null && _districts.isNotEmpty) {
+      final distLower = _clean(tmpDistrictName).toLowerCase();
+      if (distLower.isNotEmpty) {
+        final foundDist = _districts.firstWhere(
+          (d) => d.name.trim().toLowerCase() == distLower,
+          orElse: () =>
+              const _DistrictRow(id: -1, cityId: -1, name: '', slug: ''),
+        );
+        if (foundDist.id != -1) {
+          tmpDistrictId = foundDist.id;
+          tmpDistrictName = foundDist.name;
+        }
+      }
+    }
 
     final applied = await showModalBottomSheet<bool>(
       context: context,
@@ -351,6 +538,7 @@ class _ListingListPageState extends State<ListingListPage> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 12),
+
                   DropdownButtonFormField<ListingType?>(
                     value: tmpType,
                     decoration: const InputDecoration(
@@ -417,21 +605,90 @@ class _ListingListPageState extends State<ListingListPage> {
                     ),
 
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: tmpCity,
+
+                  // ✅ Konum hata
+                  if (_locError != null) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _locError!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+
+                  // ✅ Şehir dropdown
+                  DropdownButtonFormField<int>(
+                    value: tmpCityId,
                     decoration: const InputDecoration(
                       labelText: 'Şehir',
                       border: OutlineInputBorder(),
                     ),
+                    isExpanded: true,
+                    items: _cities
+                        .map(
+                          (c) => DropdownMenuItem<int>(
+                            value: c.id,
+                            child: Text(c.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (_loadingCities)
+                        ? null
+                        : (v) async {
+                            if (v == null) return;
+                            final city = _cities.firstWhere((c) => c.id == v);
+
+                            setLocal(() {
+                              tmpCityId = v;
+                              tmpCityName = city.name;
+
+                              // ✅ şehir değişince ilçe sıfır
+                              tmpDistrictId = null;
+                              tmpDistrictName = '';
+                            });
+
+                            await _loadDistricts(v);
+                            if (mounted) setLocal(() {});
+                          },
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: tmpDistrict,
-                    decoration: const InputDecoration(
-                      labelText: 'İlçe',
-                      border: OutlineInputBorder(),
+
+                  // ✅ İlçe dropdown
+                  DropdownButtonFormField<int>(
+                    value: tmpDistrictId,
+                    decoration: InputDecoration(
+                      labelText: (tmpCityId == null)
+                          ? 'Önce şehir seç'
+                          : 'İlçe',
+                      border: const OutlineInputBorder(),
                     ),
+                    isExpanded: true,
+                    items: _districts
+                        .map(
+                          (d) => DropdownMenuItem<int>(
+                            value: d.id,
+                            child: Text(d.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (tmpCityId == null || _loadingDistricts)
+                        ? null
+                        : (v) {
+                            if (v == null) return;
+                            final d = _districts.firstWhere((x) => x.id == v);
+                            setLocal(() {
+                              tmpDistrictId = v;
+                              tmpDistrictName = d.name;
+                            });
+                          },
                   ),
+
+                  const SizedBox(height: 10),
+                  if (_loadingCities || _loadingDistricts)
+                    const LinearProgressIndicator(minHeight: 2),
+
                   const SizedBox(height: 14),
                   Row(
                     children: [
@@ -442,8 +699,11 @@ class _ListingListPageState extends State<ListingListPage> {
                               tmpType = null;
                               tmpPeriod = null;
                               tmpItemCat = null;
-                              tmpCity.text = '';
-                              tmpDistrict.text = '';
+
+                              tmpCityId = null;
+                              tmpDistrictId = null;
+                              tmpCityName = '';
+                              tmpDistrictName = '';
                             });
                           },
                           child: const Text('Sıfırla'),
@@ -479,9 +739,15 @@ class _ListingListPageState extends State<ListingListPage> {
           _itemCategory = null;
         }
 
-        _cityCtrl.text = tmpCity.text;
-        _districtCtrl.text = tmpDistrict.text;
+        // ✅ Şehir/ilçe text filtreleri (asıl fetch bunları kullanıyor)
+        _cityCtrl.text = _clean(tmpCityName);
+        _districtCtrl.text = _clean(tmpDistrictName);
+
+        // ✅ id'leri de sakla (bir daha açınca seçili gelsin)
+        _selectedCityId = tmpCityId;
+        _selectedDistrictId = tmpDistrictId;
       });
+
       await _load();
     }
   }
@@ -681,7 +947,15 @@ class _ListingListPageState extends State<ListingListPage> {
       _cityCtrl.text = city;
       _districtCtrl.text = district;
       _qCtrl.text = q;
+
+      // ✅ dropdown id'leri, loadCities sonrası eşleşecek
+      _selectedCityId = null;
+      _selectedDistrictId = null;
     });
+
+    // ✅ şehir listesi hazırsa eşle, değilse yükle
+    await _ensureCitiesLoaded();
+    await _loadCities(); // text -> id eşlemesini yapsın
 
     await _load();
     if (!mounted) return;
@@ -1043,7 +1317,6 @@ class _ListingListPageState extends State<ListingListPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ✅ Foto (küçük) + rozetler
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: SizedBox(
@@ -1118,10 +1391,7 @@ class _ListingListPageState extends State<ListingListPage> {
                   ),
                 ),
               ),
-
               const SizedBox(width: 10),
-
-              // ✅ Sağ taraf: başlık + 3 chip
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1162,7 +1432,6 @@ class _ListingListPageState extends State<ListingListPage> {
   Widget build(BuildContext context) {
     const maxW = 560.0;
 
-    // ✅ başlık istersek tipe göre gösterebiliriz
     final dynamicTitle = (_type == null)
         ? 'İlanlar'
         : '${_type!.label} İlanları';

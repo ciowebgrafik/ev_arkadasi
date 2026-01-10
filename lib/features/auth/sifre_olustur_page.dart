@@ -11,6 +11,8 @@ class SifreOlusturPage extends StatefulWidget {
 }
 
 class _SifreOlusturPageState extends State<SifreOlusturPage> {
+  static const Color kTurkuaz = Color(0xFF00B8D4);
+
   final _pass1 = TextEditingController();
   final _pass2 = TextEditingController();
 
@@ -27,7 +29,9 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
 
   void _snack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
   }
 
   bool _hasSpecial(String s) {
@@ -84,6 +88,11 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
       _snack('Şifre oluşturuldu ✅');
 
       await widget.onPasswordCreated?.call();
+
+      // ✅ Nereden açarsan aç: geri dönmek istersen
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
+      }
     } catch (e) {
       if (!mounted) return;
       _snack('Şifre oluşturma hatası: $e');
@@ -116,72 +125,113 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
     final hasDigit = RegExp(r'\d').hasMatch(p);
     final hasSpec = _hasSpecial(p);
 
-    // ✅ Scaffold YOK (AppPage zaten Scaffold veriyor)
-    return ListView(
-      children: [
-        const SizedBox(height: 8),
-        const Text(
-          'Şifre Oluştur',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'Bundan sonra email + şifre ile gireceksin. Şifreni unutursan “Şifremi unuttum” ile mailden sıfırlarsın.',
-          textAlign: TextAlign.left,
-        ),
-        const SizedBox(height: 16),
-
-        TextField(
-          controller: _pass1,
-          obscureText: !_show1,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            labelText: 'Yeni şifre',
-            border: const OutlineInputBorder(),
-            suffixIcon: IconButton(
-              onPressed: () => setState(() => _show1 = !_show1),
-              icon: Icon(_show1 ? Icons.visibility_off : Icons.visibility),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        TextField(
-          controller: _pass2,
-          obscureText: !_show2,
-          decoration: InputDecoration(
-            labelText: 'Yeni şifre (tekrar)',
-            border: const OutlineInputBorder(),
-            suffixIcon: IconButton(
-              onPressed: () => setState(() => _show2 = !_show2),
-              icon: Icon(_show2 ? Icons.visibility_off : Icons.visibility),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 14),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    // ✅ EN GARANTİ: Scaffold + Material burada
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: kTurkuaz,
+        foregroundColor: Colors.white,
+        title: const Text('Şifre Oluştur'),
+        centerTitle: true,
+      ),
+      body: SafeArea(
+        child: Stack(
           children: [
-            _ruleRow(has8, 'En az 8 karakter'),
-            _ruleRow(hasUpper, '1 büyük harf (A-Z)'),
-            _ruleRow(hasLower, '1 küçük harf (a-z)'),
-            _ruleRow(hasDigit, '1 rakam (0-9)'),
-            _ruleRow(hasSpec, '1 özel karakter (!@#...)'),
+            ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+              children: [
+                const SizedBox(height: 4),
+                const Text(
+                  'Bundan sonra email + şifre ile gireceksin.\n'
+                  'Şifreni unutursan “Şifremi unuttum” ile mailden sıfırlarsın.',
+                  textAlign: TextAlign.left,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 16),
+
+                TextField(
+                  controller: _pass1,
+                  obscureText: !_show1,
+                  enabled: !_loading,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Yeni şifre',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      onPressed: _loading
+                          ? null
+                          : () => setState(() => _show1 = !_show1),
+                      icon: Icon(
+                        _show1 ? Icons.visibility_off : Icons.visibility,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: _pass2,
+                  obscureText: !_show2,
+                  enabled: !_loading,
+                  decoration: InputDecoration(
+                    labelText: 'Yeni şifre (tekrar)',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      onPressed: _loading
+                          ? null
+                          : () => setState(() => _show2 = !_show2),
+                      icon: Icon(
+                        _show2 ? Icons.visibility_off : Icons.visibility,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ruleRow(has8, 'En az 8 karakter'),
+                    _ruleRow(hasUpper, '1 büyük harf (A-Z)'),
+                    _ruleRow(hasLower, '1 küçük harf (a-z)'),
+                    _ruleRow(hasDigit, '1 rakam (0-9)'),
+                    _ruleRow(hasSpec, '1 özel karakter (!@#...)'),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kTurkuaz,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: _loading ? null : _createPassword,
+                    child: Text(
+                      _loading ? 'Kaydediliyor...' : 'Şifreyi Kaydet',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+
+            if (_loading)
+              AbsorbPointer(
+                absorbing: true,
+                child: Container(
+                  color: Colors.black.withOpacity(0.12),
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+              ),
           ],
         ),
-
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton(
-            onPressed: _loading ? null : _createPassword,
-            child: Text(_loading ? 'Kaydediliyor...' : 'Şifreyi Kaydet'),
-          ),
-        ),
-        const SizedBox(height: 12),
-      ],
+      ),
     );
   }
 }
