@@ -4,8 +4,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'chat_page.dart'; // ✅ ChatPage(chatId, otherUserId, otherUserName, listingTitle)
-import 'chat_service.dart'; // ✅ getOrCreateConversation
 import 'listing_enums.dart';
 import 'listing_preferences_section.dart';
 import 'listing_rules_section.dart';
@@ -26,18 +24,12 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   final _service = ListingsService();
   final _pageCtrl = PageController();
 
-  // ✅ Chat service (YENİ)
-  final _chatService = ChatService();
-
   int _index = 0;
   bool _loadingImages = true;
   String? _imgError;
 
   bool _isFav = false;
   bool _favLoading = true;
-
-  // ✅ Chat loading
-  bool _chatLoading = false;
 
   List<String> _paths = [];
   List<String> _signedUrls = [];
@@ -67,8 +59,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
       _reportLoading = false;
       _reportTextCtrl.clear();
-
-      _chatLoading = false;
 
       _loadFavoriteStatus();
       _loadImages();
@@ -135,93 +125,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('WhatsApp açılamadı.')));
-    }
-  }
-
-  // ---------------------- ✅ Uygulama içi Chat ----------------------
-
-  String _ownerIdOfListing(Map<String, dynamic> it) {
-    // ✅ en sağlam alan: owner_id
-    final a = (it['owner_id'] ?? '').toString().trim();
-    if (a.isNotEmpty) return a;
-
-    // ✅ bazen user_id olur
-    final b = (it['user_id'] ?? '').toString().trim();
-    if (b.isNotEmpty) return b;
-
-    // ✅ profiles join varsa
-    final p = it['profiles'];
-    if (p is Map) {
-      final pid = (p['id'] ?? '').toString().trim();
-      if (pid.isNotEmpty) return pid;
-    }
-    if (p is List && p.isNotEmpty && p.first is Map) {
-      final pid = ((p.first as Map)['id'] ?? '').toString().trim();
-      if (pid.isNotEmpty) return pid;
-    }
-
-    return '';
-  }
-
-  Future<void> _openChat() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mesaj için giriş yapmalısın.')),
-      );
-      return;
-    }
-
-    final listingId = _listingId();
-    final otherId = _ownerIdOfListing(widget.listing);
-
-    if (listingId.isEmpty || otherId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Chat açılamadı: listing/owner id yok.')),
-      );
-      return;
-    }
-
-    if (otherId == user.id) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kendi ilanına mesaj atamazsın 😄')),
-      );
-      return;
-    }
-
-    if (_chatLoading) return;
-    setState(() => _chatLoading = true);
-
-    try {
-      // ✅ YENİ: getOrCreateConversation
-      final convId = await _chatService.getOrCreateConversation(
-        listingId: listingId,
-        otherUserId: otherId,
-      );
-
-      final otherName = _profileName(widget.listing);
-      final title = (widget.listing['title'] ?? '').toString().trim();
-
-      if (!mounted) return;
-
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatPage(
-            chatId: convId, // ✅ conversation id
-            otherUserId: otherId,
-            otherUserName: otherName.isEmpty ? 'Kullanıcı' : otherName,
-            listingTitle: title.isEmpty ? 'İlan' : title,
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Chat açılamadı: $e')));
-    } finally {
-      if (mounted) setState(() => _chatLoading = false);
     }
   }
 
@@ -428,45 +331,58 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       builder: (_) {
         final bottom = MediaQuery.of(context).viewInsets.bottom;
         return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottom),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Şikayet Et',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _reportTextCtrl,
-                  minLines: 2,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: 'Kısaca detay yaz (opsiyonel)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottom),
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Şikayet Et',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _reportTextCtrl,
+                      minLines: 2,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                      decoration: InputDecoration(
+                        hintText: 'Kısaca detay yaz (opsiyonel)',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _reportTile(
+                      icon: Icons.report_gmailerrorred_outlined,
+                      title: 'Sahte ilan / dolandırıcılık',
+                      reason: 'scam',
+                    ),
+                    _reportTile(
+                      icon: Icons.block_outlined,
+                      title: 'Uygunsuz içerik',
+                      reason: 'inappropriate',
+                    ),
+                    _reportTile(
+                      icon: Icons.help_outline,
+                      title: 'Diğer',
+                      reason: 'other',
+                    ),
+                    const SizedBox(height: 6),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                _reportTile(
-                  icon: Icons.report_gmailerrorred_outlined,
-                  title: 'Sahte ilan / dolandırıcılık',
-                  reason: 'scam',
-                ),
-                _reportTile(
-                  icon: Icons.block_outlined,
-                  title: 'Uygunsuz içerik',
-                  reason: 'inappropriate',
-                ),
-                _reportTile(
-                  icon: Icons.help_outline,
-                  title: 'Diğer',
-                  reason: 'other',
-                ),
-                const SizedBox(height: 6),
-              ],
+              ),
             ),
           ),
         );
@@ -967,6 +883,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
     return Scaffold(
       backgroundColor: Colors.white,
+      // ✅ Bu sayfada TextField sadece bottom sheet’te var ama yine de güvenli:
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
@@ -1000,150 +918,134 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
           ),
         ],
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _StickyHeaderDelegate(
-              height: 72,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                child: _underAppBarActions(
-                  title: title.isEmpty ? 'İlan' : title,
-                  locationText: location,
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: CustomScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          slivers: [
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _StickyHeaderDelegate(
+                height: 72,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: _underAppBarActions(
+                    title: title.isEmpty ? 'İlan' : title,
+                    locationText: location,
+                  ),
                 ),
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.all(12),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _imageArea(),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title.isEmpty ? '(Başlıksız)' : title,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
+            SliverPadding(
+              padding: const EdgeInsets.all(12),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  _imageArea(),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title.isEmpty ? '(Başlıksız)' : title,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
-                    ),
-                    if (urgent) ...[
-                      const SizedBox(width: 10),
-                      _chip('ACİL', bg: Colors.red, fg: Colors.white),
+                      if (urgent) ...[
+                        const SizedBox(width: 10),
+                        _chip('ACİL', bg: Colors.red, fg: Colors.white),
+                      ],
                     ],
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _chip(typeLabel),
-                    _chip(_fmtPrice(it)),
-                    _chip(
-                      location.isNotEmpty ? location : 'Konum belirtilmemiş',
-                    ),
-                    if (createdAt != null)
-                      _iconChip(Icons.calendar_today, createdAt),
-                    if (views != null)
-                      _iconChip(Icons.remove_red_eye, '$views görüntüleme'),
-                    if (status.isNotEmpty) _chip(status),
-                    if (phone.isNotEmpty) _chip('Tel: $phone'),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                _ownerCard(
-                  ownerName: ownerName,
-                  phone: phone,
-                  ownerCity: ownerCity,
-                ),
-                const SizedBox(height: 10),
-                if (showRoommateExtras) ...[
-                  ListingRulesSection(rules: rules),
+                  ),
                   const SizedBox(height: 10),
-                  ListingPreferencesSection(preferences: preferences),
-                  const SizedBox(height: 10),
-                ],
-                if (desc.isNotEmpty) ...[
-                  Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      side: BorderSide(color: Colors.grey.shade200),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        desc,
-                        style: const TextStyle(fontSize: 15, height: 1.35),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _chip(typeLabel),
+                      _chip(_fmtPrice(it)),
+                      _chip(
+                        location.isNotEmpty ? location : 'Konum belirtilmemiş',
                       ),
-                    ),
+                      if (createdAt != null)
+                        _iconChip(Icons.calendar_today, createdAt),
+                      if (views != null)
+                        _iconChip(Icons.remove_red_eye, '$views görüntüleme'),
+                      if (status.isNotEmpty) _chip(status),
+                      if (phone.isNotEmpty) _chip('Tel: $phone'),
+                    ],
                   ),
                   const SizedBox(height: 14),
-
-                  // ✅ WhatsApp (kalsın)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF25D366),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: _isValidWhatsappPhone(phone)
-                          ? () => _openWhatsApp(
-                              phone: phone,
-                              message:
-                                  'Merhaba, "${title.isEmpty ? "ilan" : title}" ilanınızı uygulamada gördüm. Detay alabilir miyim?',
-                            )
-                          : null,
-                      icon: const FaIcon(
-                        FontAwesomeIcons.whatsapp,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      label: const Text(
-                        'WhatsApp ile İletişime Geç',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                  _ownerCard(
+                    ownerName: ownerName,
+                    phone: phone,
+                    ownerCity: ownerCity,
                   ),
                   const SizedBox(height: 10),
-
-                  // ✅ Mesaj Gönder → UYGULAMA İÇİ CHAT
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton.icon(
-                      onPressed: _chatLoading ? null : _openChat,
-                      icon: _chatLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.chat_bubble_outline),
-                      label: const Text(
-                        'Mesaj Gönder',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                  if (showRoommateExtras) ...[
+                    ListingRulesSection(rules: rules),
+                    const SizedBox(height: 10),
+                    ListingPreferencesSection(preferences: preferences),
+                    const SizedBox(height: 10),
+                  ],
+                  if (desc.isNotEmpty) ...[
+                    Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: Colors.grey.shade200),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          desc,
+                          style: const TextStyle(fontSize: 15, height: 1.35),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ]),
+                    const SizedBox(height: 14),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF25D366),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: _isValidWhatsappPhone(phone)
+                            ? () => _openWhatsApp(
+                                phone: phone,
+                                message:
+                                    'Merhaba, "${title.isEmpty ? "ilan" : title}" ilanınızı uygulamada gördüm. Detay alabilir miyim?',
+                              )
+                            : null,
+                        icon: const FaIcon(
+                          FontAwesomeIcons.whatsapp,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        label: const Text(
+                          'WhatsApp ile İletişime Geç',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ]),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

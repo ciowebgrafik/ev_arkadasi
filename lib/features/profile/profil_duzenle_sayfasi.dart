@@ -27,20 +27,16 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   String _existingAvatarPath = '';
   String? _cachedSignedUrl;
 
-  // ✅ Mevcut profil değerleri (DB’den)
   String _initialCityName = '';
   String _initialDistrictName = '';
 
-  // ✅ Dropdown seçimleri
   int? _selectedCityId;
   String? _selectedCityName;
   String? _selectedDistrictName;
 
-  // ✅ DB’den listeler
   bool _loadingCities = true;
   bool _loadingDistricts = false;
 
-  // city item: {id:int, name:String}
   List<Map<String, dynamic>> _cities = [];
   List<String> _districts = [];
 
@@ -66,9 +62,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   }
 
   Future<void> _initLoad() async {
-    // 1) şehirleri yükle
     await _loadCities();
-    // 2) profili yükle (seçimleri set edecek)
     await _profiliYukle();
   }
 
@@ -170,7 +164,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
         _cachedSignedUrl = await _signedAvatarUrl(_existingAvatarPath);
       }
 
-      // ✅ şehir ismine göre cityId bul
       if (_initialCityName.isNotEmpty && _cities.isNotEmpty) {
         final row = _cities.firstWhere(
           (x) =>
@@ -188,10 +181,8 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
           _selectedCityId = id;
           _selectedCityName = (row['name'] ?? '').toString().trim();
 
-          // ✅ ilçeleri çek
           await _loadDistrictsOfCityId(id);
 
-          // ✅ ilçeyi seçili getir (varsa listede)
           if (_initialDistrictName.isNotEmpty &&
               _districts.any(
                 (d) => d.toLowerCase() == _initialDistrictName.toLowerCase(),
@@ -292,9 +283,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
         'updated_at': DateTime.now().toIso8601String(),
       };
 
-      if (newAvatarPath != null) {
-        updateMap['avatar_path'] = newAvatarPath;
-      }
+      if (newAvatarPath != null) updateMap['avatar_path'] = newAvatarPath;
 
       await supabase.from('profiles').update(updateMap).eq('id', user.id);
 
@@ -341,7 +330,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
           : (id) async {
               if (id == null) return;
 
-              // name’i bul
               final row = _cities.firstWhere((x) {
                 final rid = (x['id'] is int)
                     ? x['id'] as int
@@ -414,25 +402,32 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
       bg = NetworkImage(_cachedSignedUrl!);
     }
 
-    return Stack(
-      children: [
-        SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: Column(
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Stack(
+        children: [
+          // ✅ SingleChildScrollView yerine ListView: klavye + dropdown daha stabil
+          ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
             children: [
-              GestureDetector(
-                onTap: _saving ? null : _fotoSec,
-                child: CircleAvatar(
-                  radius: 54,
-                  backgroundColor: Colors.grey.shade200,
-                  backgroundImage: bg,
-                  child: bg == null
-                      ? const Icon(Icons.camera_alt, size: 32)
-                      : null,
+              Center(
+                child: GestureDetector(
+                  onTap: _saving ? null : _fotoSec,
+                  child: CircleAvatar(
+                    radius: 54,
+                    backgroundColor: Colors.grey.shade200,
+                    backgroundImage: bg,
+                    child: bg == null
+                        ? const Icon(Icons.camera_alt, size: 32)
+                        : null,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
-
               TextField(
                 controller: _adController,
                 textInputAction: TextInputAction.next,
@@ -442,7 +437,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
                 ),
               ),
               const SizedBox(height: 12),
-
               TextField(
                 controller: _telefonController,
                 textInputAction: TextInputAction.next,
@@ -453,13 +447,10 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
                 keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 12),
-
               _cityDropdown(),
               const SizedBox(height: 12),
-
               _districtDropdown(),
               const SizedBox(height: 12),
-
               TextField(
                 controller: _bioController,
                 decoration: const InputDecoration(
@@ -469,7 +460,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
                 maxLines: 3,
               ),
               const SizedBox(height: 22),
-
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -485,24 +475,28 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
                   child: Text(_saving ? 'Kaydediliyor...' : 'Kaydet'),
                 ),
               ),
-
               const SizedBox(height: 24),
             ],
           ),
-        ),
 
-        if (_saving)
-          Container(
-            color: Colors.black.withOpacity(0.15),
-            child: const Center(child: CircularProgressIndicator()),
-          ),
-      ],
+          if (_saving)
+            AbsorbPointer(
+              absorbing: true,
+              child: Container(
+                color: Colors.black.withOpacity(0.15),
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // ✅ klavye açılınca resize
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
@@ -519,10 +513,12 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
           ),
         ],
       ),
-      body: Material(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _buildBody(context),
+      body: SafeArea(
+        child: Material(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildBody(context),
+        ),
       ),
     );
   }

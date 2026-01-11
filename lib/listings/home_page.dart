@@ -7,8 +7,6 @@ import 'favorites_page.dart';
 import 'listing_create_page.dart';
 import 'listing_enums.dart'; // ✅ ListingType için gerekli
 import 'listing_list_page.dart';
-// ✅ Mesajlar
-import 'message_list_page.dart';
 import 'my_listings_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -124,8 +122,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ✅ TÜRE GÖRE AÇILAN LİSTELER
-
   Future<void> _openRoommateListings() async {
     await Navigator.push(
       context,
@@ -202,7 +198,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // (şimdilik özel algoritma yok → normal roommate listesi açıyoruz)
   Future<void> _openFindBestRoommate() async {
     await _openRoommateListings();
   }
@@ -218,14 +213,6 @@ class _HomePageState extends State<HomePage> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const MyListingsPage()),
-    );
-  }
-
-  // ✅ MESAJLAR
-  Future<void> _openMessages() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const MessageListPage()),
     );
   }
 
@@ -254,14 +241,6 @@ class _HomePageState extends State<HomePage> {
               onTap: () {
                 Navigator.pop(context);
                 Future.microtask(_openCreateListing);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.chat_bubble_outline),
-              title: const Text('Mesajlar'),
-              onTap: () {
-                Navigator.pop(context);
-                Future.microtask(_openMessages);
               },
             ),
             ListTile(
@@ -336,11 +315,11 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.symmetric(horizontal: 18),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.start,
             children: [
               Icon(icon, size: 20, color: kTurkuaz),
               const SizedBox(width: 10),
-              Flexible(
+              Expanded(
                 child: Text(
                   text,
                   overflow: TextOverflow.ellipsis,
@@ -440,14 +419,11 @@ class _HomePageState extends State<HomePage> {
                 await _openFavorites();
               } else if (v == 'my_listings') {
                 await _openMyListings();
-              } else if (v == 'messages') {
-                await _openMessages();
               } else if (v == 'logout') {
                 await _signOut();
               }
             },
             itemBuilder: (context) => const [
-              PopupMenuItem(value: 'messages', child: Text('Mesajlar')),
               PopupMenuItem(value: 'favorites', child: Text('Favoriler')),
               PopupMenuItem(value: 'my_listings', child: Text('İlanlarım')),
               PopupMenuDivider(),
@@ -473,20 +449,10 @@ class _HomePageState extends State<HomePage> {
 
                   _menuPill(
                     width: safeWidth,
-                    alignRight: false,
+                    alignRight: true,
                     text: 'İlan Yayınla',
                     icon: Icons.add_circle_outline,
                     onTap: _openCreateListing,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ✅ MESAJLAR PILL
-                  _menuPill(
-                    width: safeWidth,
-                    alignRight: true,
-                    text: 'Mesajlar',
-                    icon: Icons.chat_bubble_outline,
-                    onTap: _openMessages,
                   ),
                   const SizedBox(height: 16),
 
