@@ -45,7 +45,7 @@ extension ItemCategoryX on ItemCategory {
 }
 
 /// =======================
-/// ✅ City/District Models (CreatePage ile aynı mantık)
+/// ✅ City/District Models
 /// =======================
 class _CityRow {
   final int id;
@@ -97,17 +97,10 @@ class ListingListPage extends StatefulWidget {
     this.initialQuery,
   });
 
-  /// ✅ Menüden hangi türe basıldıysa buradan gelir:
-  /// ListingListPage(initialType: ListingType.transport) gibi.
   final ListingType? initialType;
-
-  /// (opsiyonel) başlangıç periyodu
   final PricePeriod? initialPeriod;
-
-  /// (opsiyonel) item için başlangıç kategori
   final ItemCategory? initialItemCategory;
 
-  /// (opsiyonel) başlangıç şehir/ilçe/q
   final String? initialCity;
   final String? initialDistrict;
   final String? initialQuery;
@@ -120,6 +113,7 @@ class _ListingListPageState extends State<ListingListPage> {
   static const Color kTurkuaz = Color(0xFF00B8D4);
 
   final _service = ListingsService();
+  final SupabaseClient _sb = Supabase.instance.client;
 
   // ✅ Saved Searches Service (Supabase)
   final _savedSearchService = SavedSearchesService();
@@ -128,6 +122,7 @@ class _ListingListPageState extends State<ListingListPage> {
   ListingType? _type;
   PricePeriod? _period; // Ev Arkadaşı / İş vb için
   ItemCategory? _itemCategory; // ✅ Ev Eşyası için
+
   final _cityCtrl = TextEditingController();
   final _districtCtrl = TextEditingController();
 
@@ -163,10 +158,8 @@ class _ListingListPageState extends State<ListingListPage> {
   void initState() {
     super.initState();
 
-    // ✅ Menüden gelen başlangıç filtrelerini uygula
     _type = widget.initialType;
 
-    // başlangıç şehir/ilçe/q (text olarak tutuluyor, dropdown açılınca eşleşecek)
     if ((widget.initialCity ?? '').trim().isNotEmpty) {
       _cityCtrl.text = widget.initialCity!.trim();
     }
@@ -177,7 +170,6 @@ class _ListingListPageState extends State<ListingListPage> {
       _qCtrl.text = widget.initialQuery!.trim();
     }
 
-    // item ise kategori, değilse period
     if (_type == ListingType.item) {
       _itemCategory = widget.initialItemCategory;
       _period = null;
@@ -208,33 +200,32 @@ class _ListingListPageState extends State<ListingListPage> {
     });
 
     try {
-      final sb = Supabase.instance.client;
-      final res = await sb
-          .from('cities')
-          .select('id,name,slug')
-          .order('id', ascending: true);
+      final res = await _sb.from('cities').select('id,name,slug').order('id');
 
       _cities = (res as List)
           .map((e) => _CityRow.fromJson((e as Map).cast<String, dynamic>()))
           .toList();
 
-      // ✅ Eğer text olarak şehir/ilçe doluysa dropdown'a eşle
-      final cityName = _clean(_cityCtrl.text).toLowerCase();
-      if (cityName.isNotEmpty) {
+      // ✅ text olarak şehir/ilçe doluysa id'ye eşle (isim veya slug ile)
+      final cityTxt = _clean(_cityCtrl.text).toLowerCase();
+      if (cityTxt.isNotEmpty) {
         final foundCity = _cities.firstWhere(
-          (c) => c.name.trim().toLowerCase() == cityName,
+          (c) =>
+              c.name.trim().toLowerCase() == cityTxt ||
+              c.slug.trim().toLowerCase() == cityTxt,
           orElse: () => const _CityRow(id: -1, name: '', slug: ''),
         );
         if (foundCity.id != -1) {
           _selectedCityId = foundCity.id;
 
-          // ilçeleri yükle
           await _loadDistricts(foundCity.id);
 
-          final distName = _clean(_districtCtrl.text).toLowerCase();
-          if (distName.isNotEmpty) {
+          final distTxt = _clean(_districtCtrl.text).toLowerCase();
+          if (distTxt.isNotEmpty) {
             final foundDist = _districts.firstWhere(
-              (d) => d.name.trim().toLowerCase() == distName,
+              (d) =>
+                  d.name.trim().toLowerCase() == distTxt ||
+                  d.slug.trim().toLowerCase() == distTxt,
               orElse: () =>
                   const _DistrictRow(id: -1, cityId: -1, name: '', slug: ''),
             );
@@ -262,12 +253,11 @@ class _ListingListPageState extends State<ListingListPage> {
     });
 
     try {
-      final sb = Supabase.instance.client;
-      final res = await sb
+      final res = await _sb
           .from('districts')
           .select('id,city_id,name,slug')
           .eq('city_id', cityId)
-          .order('name', ascending: true);
+          .order('name');
 
       _districts = (res as List)
           .map((e) => _DistrictRow.fromJson((e as Map).cast<String, dynamic>()))
@@ -321,7 +311,6 @@ class _ListingListPageState extends State<ListingListPage> {
         return 'ALTIN';
     }
 
-    // eski veriye fallback
     final boosted = details['boosted'] == true;
     return boosted ? 'BRONZ' : '';
   }
@@ -372,8 +361,133 @@ class _ListingListPageState extends State<ListingListPage> {
     );
   }
 
-  // ---------------------- LOAD ----------------------
+  // ===========================
+  // ✅ ARAMA: yazılan metinden "ilan türü" tahmini
+  // (sadece _type seçili değilse devreye girer)
+  // ===========================
+  Set<ListingType> _inferTypesFromQuery(String raw) {
+    final q = raw.toLowerCase().trim();
+    if (q.isEmpty) return {};
 
+    bool hasAny(List<String> keys) => keys.any((k) => q.contains(k));
+
+    final out = <ListingType>{};
+
+    // job
+    if (hasAny([
+      'iş',
+      'is ilan',
+      'iş ilan',
+      'job',
+      'kariyer',
+      'çalış',
+      'calis',
+    ])) {
+      if (ListingType.values.map((e) => e.name).contains('job')) {
+        // Eğer enum'da job varsa
+        out.add(ListingType.values.byName('job'));
+      }
+    }
+
+    // roommate
+    if (hasAny([
+      'ev arkadaşı',
+      'ev arkadasi',
+      'roommate',
+      'kiracı',
+      'kiraci',
+    ])) {
+      if (ListingType.values.map((e) => e.name).contains('roommate')) {
+        out.add(ListingType.values.byName('roommate'));
+      }
+    }
+
+    // item (eşya)
+    if (hasAny([
+      'eşya',
+      'esya',
+      'mobilya',
+      'beyaz eşya',
+      'beyaz esya',
+      'dolap',
+      'buzdolabı',
+      'buzdolabi',
+    ])) {
+      out.add(ListingType.item);
+    }
+
+    return out;
+  }
+
+  // ---------------------- ✅ FETCH (title/desc + type search) ----------------------
+  Future<List<Map<String, dynamic>>> _fetchListingsDirect() async {
+    final cityTxt = _clean(_cityCtrl.text);
+    final distTxt = _clean(_districtCtrl.text);
+    final qTxt = _clean(_qCtrl.text);
+
+    var query = _sb.from('listings').select('*');
+
+    // ✅ SADECE YAYINDAKİLERİ GÖSTER (paused/draft/sold/closed/deleted gelmesin)
+    query = query.eq('status', 'published');
+
+    // ✅ Tür filtresi (seçiliyse)
+    if (_type != null) {
+      query = query.eq('type', listingTypeToDb(_type!));
+    }
+
+    // ✅ Periyot / Kategori
+    if (_type == ListingType.item) {
+      if (_itemCategory != null) {
+        query = query.contains('details', {'category': _itemCategory!.db});
+      }
+    } else {
+      if (_period != null) {
+        query = query.eq('price_period', pricePeriodToDb(_period!));
+      }
+    }
+
+    // ✅ Konum (id ile filtre)
+    if (_selectedCityId != null) {
+      query = query.eq('city_id', _selectedCityId!);
+    } else if (cityTxt.isNotEmpty) {
+      query = query.ilike('city', cityTxt);
+    }
+
+    if (_selectedDistrictId != null) {
+      query = query.eq('district_id', _selectedDistrictId!);
+    } else if (distTxt.isNotEmpty) {
+      query = query.ilike('district', distTxt);
+    }
+
+    // ✅ Arama: başlık/açıklama + (type search)
+    if (qTxt.isNotEmpty) {
+      final pattern = '%$qTxt%';
+
+      final orParts = <String>[
+        'title.ilike.$pattern',
+        'description.ilike.$pattern',
+      ];
+
+      // ✅ type search sadece tür filtresi seçili değilse
+      if (_type == null) {
+        final inferred = _inferTypesFromQuery(qTxt);
+        for (final t in inferred) {
+          // type.eq.<db>
+          orParts.add('type.eq.${listingTypeToDb(t)}');
+        }
+      }
+
+      query = query.or(orParts.join(','));
+    }
+
+    final res = await query.order('created_at', ascending: false);
+
+    return (res as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  // ---------------------- LOAD ----------------------
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -381,23 +495,14 @@ class _ListingListPageState extends State<ListingListPage> {
     });
 
     try {
-      final city = _clean(_cityCtrl.text);
-      final district = _clean(_districtCtrl.text);
-      final q = _clean(_qCtrl.text);
-
-      final items = await _service.fetchListings(
-        type: _type,
-        pricePeriod: _isItemTypeSelected ? null : _period,
-        city: city.isEmpty ? null : city,
-        district: district.isEmpty ? null : district,
-        searchQuery: q.isEmpty ? null : q,
-        itemCategory: _isItemTypeSelected ? _itemCategory?.db : null,
-      );
-
+      final items = await _fetchListingsDirect();
       if (!mounted) return;
 
       final sorted = List<Map<String, dynamic>>.from(items);
       _applySort(sorted);
+
+      // ✅ cache reset (liste değişince eski resim/url kalmasın)
+      _firstImageUrlCache.clear();
 
       setState(() => _items = sorted);
 
@@ -461,29 +566,27 @@ class _ListingListPageState extends State<ListingListPage> {
   }
 
   // ---------------------- TOP ACTIONS ----------------------
-
   Future<void> _openFilterSheet() async {
     await _ensureCitiesLoaded();
 
-    // temp controllers (q yok burada, şehir/ilçe dropdown ile yönetilecek)
     ListingType? tmpType = _type;
     PricePeriod? tmpPeriod = _period;
     ItemCategory? tmpItemCat = _itemCategory;
 
-    // ✅ temp şehir/ilçe seçimi
     int? tmpCityId = _selectedCityId;
     int? tmpDistrictId = _selectedDistrictId;
 
-    // şehir adı/district adı text olarak da saklı (apply sırasında _cityCtrl/_districtCtrl dolduracağız)
     String tmpCityName = _cityCtrl.text;
     String tmpDistrictName = _districtCtrl.text;
 
-    // ✅ eğer text var ama id yoksa eşleştir (ilk açılış)
+    // ✅ text var ama id yoksa eşle
     if (tmpCityId == null && _cities.isNotEmpty) {
       final cityLower = _clean(tmpCityName).toLowerCase();
       if (cityLower.isNotEmpty) {
         final found = _cities.firstWhere(
-          (c) => c.name.trim().toLowerCase() == cityLower,
+          (c) =>
+              c.name.trim().toLowerCase() == cityLower ||
+              c.slug.trim().toLowerCase() == cityLower,
           orElse: () => const _CityRow(id: -1, name: '', slug: ''),
         );
         if (found.id != -1) {
@@ -502,7 +605,9 @@ class _ListingListPageState extends State<ListingListPage> {
       final distLower = _clean(tmpDistrictName).toLowerCase();
       if (distLower.isNotEmpty) {
         final foundDist = _districts.firstWhere(
-          (d) => d.name.trim().toLowerCase() == distLower,
+          (d) =>
+              d.name.trim().toLowerCase() == distLower ||
+              d.slug.trim().toLowerCase() == distLower,
           orElse: () =>
               const _DistrictRow(id: -1, cityId: -1, name: '', slug: ''),
         );
@@ -517,210 +622,253 @@ class _ListingListPageState extends State<ListingListPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      useSafeArea: true,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 8,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-          ),
-          child: StatefulBuilder(
-            builder: (ctx, setLocal) {
-              final isItem = tmpType == ListingType.item;
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+        final safeBottom = MediaQuery.of(ctx).padding.bottom;
+        final bottomPad = bottomInset + safeBottom + 16;
 
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Filtrele',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 12),
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 8,
+              bottom: bottomPad,
+            ),
+            child: StatefulBuilder(
+              builder: (ctx, setLocal) {
+                final isItem = tmpType == ListingType.item;
 
-                  DropdownButtonFormField<ListingType?>(
-                    value: tmpType,
-                    decoration: const InputDecoration(
-                      labelText: 'Tür',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('Hepsi')),
-                      ...ListingType.values.map(
-                        (t) => DropdownMenuItem(value: t, child: Text(t.label)),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      setLocal(() {
-                        tmpType = v;
-                        if (tmpType == ListingType.item) {
-                          tmpPeriod = null;
-                        } else {
-                          tmpItemCat = null;
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-
-                  if (isItem)
-                    DropdownButtonFormField<ItemCategory?>(
-                      value: tmpItemCat,
-                      decoration: const InputDecoration(
-                        labelText: 'Kategori',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('Hepsi'),
-                        ),
-                        ...ItemCategory.values.map(
-                          (c) =>
-                              DropdownMenuItem(value: c, child: Text(c.label)),
-                        ),
-                      ],
-                      onChanged: (v) => setLocal(() => tmpItemCat = v),
-                    ),
-
-                  if (!isItem)
-                    DropdownButtonFormField<PricePeriod?>(
-                      value: tmpPeriod,
-                      decoration: const InputDecoration(
-                        labelText: 'Periyot',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('Hepsi'),
-                        ),
-                        ...PricePeriod.values.map(
-                          (p) =>
-                              DropdownMenuItem(value: p, child: Text(p.label)),
-                        ),
-                      ],
-                      onChanged: (v) => setLocal(() => tmpPeriod = v),
-                    ),
-
-                  const SizedBox(height: 12),
-
-                  // ✅ Konum hata
-                  if (_locError != null) ...[
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        _locError!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-
-                  // ✅ Şehir dropdown
-                  DropdownButtonFormField<int>(
-                    value: tmpCityId,
-                    decoration: const InputDecoration(
-                      labelText: 'Şehir',
-                      border: OutlineInputBorder(),
-                    ),
-                    isExpanded: true,
-                    items: _cities
-                        .map(
-                          (c) => DropdownMenuItem<int>(
-                            value: c.id,
-                            child: Text(c.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (_loadingCities)
-                        ? null
-                        : (v) async {
-                            if (v == null) return;
-                            final city = _cities.firstWhere((c) => c.id == v);
-
-                            setLocal(() {
-                              tmpCityId = v;
-                              tmpCityName = city.name;
-
-                              // ✅ şehir değişince ilçe sıfır
-                              tmpDistrictId = null;
-                              tmpDistrictName = '';
-                            });
-
-                            await _loadDistricts(v);
-                            if (mounted) setLocal(() {});
-                          },
-                  ),
-                  const SizedBox(height: 12),
-
-                  // ✅ İlçe dropdown
-                  DropdownButtonFormField<int>(
-                    value: tmpDistrictId,
-                    decoration: InputDecoration(
-                      labelText: (tmpCityId == null)
-                          ? 'Önce şehir seç'
-                          : 'İlçe',
-                      border: const OutlineInputBorder(),
-                    ),
-                    isExpanded: true,
-                    items: _districts
-                        .map(
-                          (d) => DropdownMenuItem<int>(
-                            value: d.id,
-                            child: Text(d.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (tmpCityId == null || _loadingDistricts)
-                        ? null
-                        : (v) {
-                            if (v == null) return;
-                            final d = _districts.firstWhere((x) => x.id == v);
-                            setLocal(() {
-                              tmpDistrictId = v;
-                              tmpDistrictName = d.name;
-                            });
-                          },
-                  ),
-
-                  const SizedBox(height: 10),
-                  if (_loadingCities || _loadingDistricts)
-                    const LinearProgressIndicator(minHeight: 2),
-
-                  const SizedBox(height: 14),
-                  Row(
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            setLocal(() {
-                              tmpType = null;
-                              tmpPeriod = null;
-                              tmpItemCat = null;
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Filtrele',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
-                              tmpCityId = null;
-                              tmpDistrictId = null;
-                              tmpCityName = '';
-                              tmpDistrictName = '';
-                            });
-                          },
-                          child: const Text('Sıfırla'),
+                      DropdownButtonFormField<ListingType?>(
+                        value: tmpType,
+                        decoration: const InputDecoration(
+                          labelText: 'Tür',
+                          border: OutlineInputBorder(),
                         ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: null,
+                            child: Text('Hepsi'),
+                          ),
+                          ...ListingType.values.map(
+                            (t) => DropdownMenuItem(
+                              value: t,
+                              child: Text(t.label),
+                            ),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          setLocal(() {
+                            tmpType = v;
+                            if (tmpType == ListingType.item) {
+                              tmpPeriod = null;
+                            } else {
+                              tmpItemCat = null;
+                            }
+                          });
+                        },
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Uygula'),
+                      const SizedBox(height: 12),
+
+                      if (isItem)
+                        DropdownButtonFormField<ItemCategory?>(
+                          value: tmpItemCat,
+                          decoration: const InputDecoration(
+                            labelText: 'Kategori',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('Hepsi'),
+                            ),
+                            ...ItemCategory.values.map(
+                              (c) => DropdownMenuItem(
+                                value: c,
+                                child: Text(c.label),
+                              ),
+                            ),
+                          ],
+                          onChanged: (v) => setLocal(() => tmpItemCat = v),
                         ),
+
+                      if (!isItem)
+                        DropdownButtonFormField<PricePeriod?>(
+                          value: tmpPeriod,
+                          decoration: const InputDecoration(
+                            labelText: 'Periyot',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('Hepsi'),
+                            ),
+                            ...PricePeriod.values.map(
+                              (p) => DropdownMenuItem(
+                                value: p,
+                                child: Text(p.label),
+                              ),
+                            ),
+                          ],
+                          onChanged: (v) => setLocal(() => tmpPeriod = v),
+                        ),
+
+                      const SizedBox(height: 12),
+
+                      if (_locError != null) ...[
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _locError!,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
+                      DropdownButtonFormField<int?>(
+                        value: tmpCityId,
+                        decoration: const InputDecoration(
+                          labelText: 'Şehir',
+                          border: OutlineInputBorder(),
+                        ),
+                        isExpanded: true,
+                        items: [
+                          const DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('Hepsi'),
+                          ),
+                          ..._cities.map(
+                            (c) => DropdownMenuItem<int?>(
+                              value: c.id,
+                              child: Text(c.name),
+                            ),
+                          ),
+                        ],
+                        onChanged: (_loadingCities)
+                            ? null
+                            : (v) async {
+                                setLocal(() {
+                                  tmpCityId = v;
+                                  tmpDistrictId = null;
+                                  tmpDistrictName = '';
+                                });
+
+                                if (v == null) {
+                                  setLocal(() {
+                                    tmpCityName = '';
+                                  });
+                                  _districts = [];
+                                  if (mounted) setLocal(() {});
+                                  return;
+                                }
+
+                                final city = _cities.firstWhere(
+                                  (c) => c.id == v,
+                                );
+                                setLocal(() {
+                                  tmpCityName = city.name;
+                                });
+
+                                await _loadDistricts(v);
+                                if (mounted) setLocal(() {});
+                              },
                       ),
+
+                      const SizedBox(height: 12),
+
+                      DropdownButtonFormField<int?>(
+                        value: tmpDistrictId,
+                        decoration: InputDecoration(
+                          labelText: (tmpCityId == null)
+                              ? 'Önce şehir seç'
+                              : 'İlçe',
+                          border: const OutlineInputBorder(),
+                        ),
+                        isExpanded: true,
+                        items: [
+                          const DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('Hepsi'),
+                          ),
+                          ..._districts.map(
+                            (d) => DropdownMenuItem<int?>(
+                              value: d.id,
+                              child: Text(d.name),
+                            ),
+                          ),
+                        ],
+                        onChanged: (tmpCityId == null || _loadingDistricts)
+                            ? null
+                            : (v) {
+                                setLocal(() {
+                                  tmpDistrictId = v;
+                                  if (v == null) {
+                                    tmpDistrictName = '';
+                                  } else {
+                                    final d = _districts.firstWhere(
+                                      (x) => x.id == v,
+                                    );
+                                    tmpDistrictName = d.name;
+                                  }
+                                });
+                              },
+                      ),
+
+                      const SizedBox(height: 10),
+                      if (_loadingCities || _loadingDistricts)
+                        const LinearProgressIndicator(minHeight: 2),
+
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                setLocal(() {
+                                  tmpType = null;
+                                  tmpPeriod = null;
+                                  tmpItemCat = null;
+                                  tmpCityId = null;
+                                  tmpDistrictId = null;
+                                  tmpCityName = '';
+                                  tmpDistrictName = '';
+                                });
+                              },
+                              child: const Text('Sıfırla'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Uygula'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
                     ],
                   ),
-                ],
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },
@@ -730,7 +878,6 @@ class _ListingListPageState extends State<ListingListPage> {
       setState(() {
         _type = tmpType;
 
-        // ✅ item ise period kapat, değilse kategori kapat
         if (_type == ListingType.item) {
           _itemCategory = tmpItemCat;
           _period = null;
@@ -739,11 +886,9 @@ class _ListingListPageState extends State<ListingListPage> {
           _itemCategory = null;
         }
 
-        // ✅ Şehir/ilçe text filtreleri (asıl fetch bunları kullanıyor)
         _cityCtrl.text = _clean(tmpCityName);
         _districtCtrl.text = _clean(tmpDistrictName);
 
-        // ✅ id'leri de sakla (bir daha açınca seçili gelsin)
         _selectedCityId = tmpCityId;
         _selectedDistrictId = tmpDistrictId;
       });
@@ -761,7 +906,7 @@ class _ListingListPageState extends State<ListingListPage> {
 
   // ✅ KAYITLI ARAMALAR: AÇ
   Future<void> _openSavedSearchesSheet() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = _sb.auth.currentUser;
     if (user == null) {
       _snack('Önce giriş yapmalısın.');
       return;
@@ -944,27 +1089,26 @@ class _ListingListPageState extends State<ListingListPage> {
       _type = newType;
       _period = newPeriod;
       _itemCategory = newItemCat;
+
       _cityCtrl.text = city;
       _districtCtrl.text = district;
       _qCtrl.text = q;
 
-      // ✅ dropdown id'leri, loadCities sonrası eşleşecek
       _selectedCityId = null;
       _selectedDistrictId = null;
     });
 
-    // ✅ şehir listesi hazırsa eşle, değilse yükle
     await _ensureCitiesLoaded();
-    await _loadCities(); // text -> id eşlemesini yapsın
-
+    await _loadCities(); // text->id eşleşsin
     await _load();
+
     if (!mounted) return;
     _snack('Kayıtlı arama uygulandı ✅');
   }
 
   // ✅ ARAMAYI KAYDET (DB'ye)
   Future<void> _saveSearch() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = _sb.auth.currentUser;
     if (user == null) {
       _snack('Önce giriş yapmalısın.');
       return;
@@ -1047,7 +1191,6 @@ class _ListingListPageState extends State<ListingListPage> {
         name: nameCtrl.text.trim(),
         filters: filters,
       );
-
       if (!mounted) return;
       _snack('Arama kaydedildi ✅');
     } catch (e) {
@@ -1174,6 +1317,7 @@ class _ListingListPageState extends State<ListingListPage> {
     final priceStr = (numPrice % 1 == 0)
         ? numPrice.toStringAsFixed(0)
         : numPrice.toStringAsFixed(2);
+
     return '$cur$priceStr / $periodLabel';
   }
 
@@ -1260,7 +1404,7 @@ class _ListingListPageState extends State<ListingListPage> {
           onSubmitted: (_) => _load(),
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search),
-            hintText: 'Ara (başlık / açıklama)',
+            hintText: 'Ara (başlık / açıklama / tür)',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
@@ -1600,13 +1744,11 @@ class SavedSearch {
         : <String, dynamic>{};
 
     final nameRaw = m['name'];
-    final name = (nameRaw == null) ? null : nameRaw.toString();
+    final nm = (nameRaw == null) ? null : nameRaw.toString().trim();
 
     return SavedSearch(
       id: (m['id'] ?? '').toString(),
-      name: (name == null || name.trim().isNotEmpty == false)
-          ? null
-          : name.trim(),
+      name: (nm == null || nm.isEmpty) ? null : nm,
       filters: filters,
       createdAt: dt,
     );

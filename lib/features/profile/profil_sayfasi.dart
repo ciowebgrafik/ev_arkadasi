@@ -11,6 +11,8 @@ class ProfilSayfasi extends StatefulWidget {
 }
 
 class _ProfilSayfasiState extends State<ProfilSayfasi> {
+  static const Color kTurkuaz = Color(0xFF00B8D4); // ✅ eklendi
+
   final supabase = Supabase.instance.client;
 
   bool _loading = true;
@@ -117,18 +119,17 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7F9),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
+        backgroundColor: kTurkuaz,
+        // ✅ turkuaz
+        foregroundColor: Colors.white,
+        // ✅ yazılar/butonlar beyaz
         elevation: 0,
         centerTitle: true,
         title: const Text(
           'Profil',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: Colors.black12),
-        ),
+        // ✅ alttaki çizgi turkuaz üstünde gereksiz durur; kaldırdım
       ),
       body: SafeArea(
         top: false,
@@ -225,15 +226,12 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                   ),
                                 ),
                                 const SizedBox(height: 12),
-
                                 _infoCard(
                                   icon: Icons.phone,
                                   label: 'Telefon',
                                   value: _phone,
                                 ),
                                 const SizedBox(height: 10),
-
-                                // ✅ Konum: Şehir + İlçe
                                 _infoCard(
                                   icon: Icons.location_on_outlined,
                                   label: 'Konum',
@@ -241,7 +239,6 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                   maxLines: 2,
                                 ),
                                 const SizedBox(height: 10),
-
                                 _infoCard(
                                   icon: Icons.info_outline,
                                   label: 'Kısa bio',
@@ -249,7 +246,6 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                   maxLines: 3,
                                 ),
                                 const SizedBox(height: 14),
-
                                 SizedBox(
                                   width: double.infinity,
                                   height: 50,
@@ -260,7 +256,6 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                   ),
                                 ),
                                 const SizedBox(height: 10),
-
                                 Text(
                                   'Aşağı çekerek yenileyebilirsin.',
                                   style: Theme.of(context).textTheme.bodySmall,

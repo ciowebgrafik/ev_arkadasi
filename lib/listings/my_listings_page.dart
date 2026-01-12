@@ -24,6 +24,9 @@ class _MyListingsPageState extends State<MyListingsPage> {
   // listingId -> signed first image url
   final Map<String, String?> _firstImageUrlCache = {};
 
+  // ✅ kaldırma loading: listingId -> bool
+  final Map<String, bool> _removeLoadingById = {};
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +43,10 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
     try {
       final res = await _service.fetchMyListings(limit: 200);
+
+      // ✅ DEĞİŞİKLİK:
+      // "İlanlarım" sayfasında KALDIRILAN (paused) ilanlar DA görünsün.
+      // (artık filtrelemiyoruz)
       _items = List<Map<String, dynamic>>.from(res);
 
       // ✅ first image signed url cache
@@ -86,40 +93,125 @@ class _MyListingsPageState extends State<MyListingsPage> {
     }
   }
 
+  // ✅ İLANI KALDIR (Service: status = paused)
+  bool _isRemovedStatus(String status) {
+    final s = status.toLowerCase().trim();
+    return s == 'paused';
+  }
+
+  bool _isPublished(String status) {
+    final s = status.toLowerCase().trim();
+    return s == 'published';
+  }
+
+  Future<void> _removeListing(Map<String, dynamic> listing) async {
+    final id = (listing['id'] ?? '').toString();
+    if (id.isEmpty) return;
+
+    final status = (listing['status'] ?? '').toString();
+
+    if (_isRemovedStatus(status)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bu ilan zaten kaldırılmış.')),
+      );
+      return;
+    }
+
+    // ✅ sadece yayında olan kaldırılabilsin
+    if (!_isPublished(status)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sadece yayındaki ilan kaldırılabilir.')),
+      );
+      return;
+    }
+
+    if (_removeLoadingById[id] == true) return;
+
+    final ok = await _confirm(
+      title: 'İlan kaldırılsın mı?',
+      message:
+          'Bu ilan artık listelerde görünmez.\n\nDaha sonra istersen "Tekrar Yayınla" ile yeniden yayına alabilirsin.',
+      confirmText: 'Kaldır',
+      danger: true,
+    );
+    if (ok != true) return;
+
+    setState(() => _removeLoadingById[id] = true);
+
+    try {
+      // ✅ Service: status=paused
+      await _service.removeListing(listingId: id);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('İlan yayından kaldırıldı ✅')),
+      );
+
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
+    } finally {
+      if (mounted) setState(() => _removeLoadingById[id] = false);
+    }
+  }
+
+  Future<bool?> _confirm({
+    required String title,
+    required String message,
+    String confirmText = 'Evet',
+    bool danger = false,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: danger ? Colors.red : null,
+              foregroundColor: danger ? Colors.white : null,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(confirmText),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _statusLabel(String s) {
     final v = s.toLowerCase().trim();
     if (v == 'published') return 'Yayında';
-    if (v == 'draft') return 'Taslak';
-    if (v == 'pending') return 'Onay Bekliyor';
-    if (v == 'rejected') return 'Reddedildi';
-    if (v == 'approved') return 'Onaylı';
+    if (v == 'paused') return 'Kaldırıldı';
     return s;
   }
 
   Color _statusBg(String s) {
     final v = s.toLowerCase().trim();
     if (v == 'published') return Colors.green.shade50;
-    if (v == 'draft') return Colors.grey.shade200;
-    if (v == 'pending') return Colors.orange.shade50;
-    if (v == 'rejected') return Colors.red.shade50;
+    if (v == 'paused') return Colors.red.shade50;
     return Colors.blue.shade50;
   }
 
   Color _statusFg(String s) {
     final v = s.toLowerCase().trim();
     if (v == 'published') return Colors.green.shade800;
-    if (v == 'draft') return Colors.black54;
-    if (v == 'pending') return Colors.orange.shade800;
-    if (v == 'rejected') return Colors.red.shade800;
+    if (v == 'paused') return Colors.red.shade800;
     return Colors.blue.shade800;
   }
 
-  // ✅ YENİ: Tüm ilan türlerini listing_enums.dart üzerinden güvenli çöz
   ListingType _parseType(dynamic v) {
     final s = (v ?? '').toString().trim();
-    return listingTypeFromDb(
-      s,
-    ); // roommate/item + diğer tüm türler burada çözülür
+    return listingTypeFromDb(s);
   }
 
   // ======================================================
@@ -159,7 +251,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
         return 'ALTIN';
     }
 
-    // eski veriye fallback
     final boosted = details['boosted'] == true;
     return boosted ? 'BRONZ' : '';
   }
@@ -258,6 +349,10 @@ class _MyListingsPageState extends State<MyListingsPage> {
                     if (district.isNotEmpty) district,
                   ].join(' / ');
 
+                  final removed = _isRemovedStatus(status); // paused
+                  final published = _isPublished(status);
+                  final removing = _removeLoadingById[id] == true;
+
                   return Card(
                     child: Padding(
                       padding: const EdgeInsets.all(12),
@@ -299,8 +394,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
                                                 ),
                                         ),
                                       ),
-
-                                      // ✅ DOPING ROZET
                                       Positioned(
                                         left: 6,
                                         top: 6,
@@ -365,6 +458,8 @@ class _MyListingsPageState extends State<MyListingsPage> {
                             ],
                           ),
                           const SizedBox(height: 12),
+
+                          // ✅ Düzenle / Tekrar Yayınla
                           Row(
                             children: [
                               Expanded(
@@ -381,12 +476,45 @@ class _MyListingsPageState extends State<MyListingsPage> {
                                     backgroundColor: kTurkuaz,
                                     foregroundColor: Colors.white,
                                   ),
-                                  onPressed: () => _republish(id),
+                                  // ✅ DEĞİŞİKLİK:
+                                  // "Tekrar Yayınla" sadece kaldırılmış (paused) iken aktif olsun.
+                                  onPressed: removed
+                                      ? () => _republish(id)
+                                      : null,
                                   icon: const Icon(Icons.publish_outlined),
                                   label: const Text('Tekrar Yayınla'),
                                 ),
                               ),
                             ],
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          // ✅ İlanı Kaldır (sadece published iken aktif)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 46,
+                            child: OutlinedButton.icon(
+                              onPressed: (!published || removed || removing)
+                                  ? null
+                                  : () => _removeListing(l),
+                              icon: removing
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.visibility_off_outlined),
+                              label: Text(
+                                removed ? 'Kaldırıldı' : 'İlanı Kaldır',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red.shade700,
+                                side: BorderSide(color: Colors.red.shade200),
+                              ),
+                            ),
                           ),
                         ],
                       ),

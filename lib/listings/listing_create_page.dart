@@ -496,7 +496,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     final city = _cities.firstWhere((c) => c.id == cityId);
     setState(() {
       _selectedCityId = cityId;
-      _cityCtrl.text = city.name; // ✅ isim (arama/filtre uyumluluğu)
+      _cityCtrl.text = city.name;
       _districtCtrl.text = '';
       _selectedDistrictId = null;
     });
@@ -509,7 +509,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     final d = _districts.firstWhere((x) => x.id == districtId);
     setState(() {
       _selectedDistrictId = districtId;
-      _districtCtrl.text = d.name; // ✅ isim (arama/filtre uyumluluğu)
+      _districtCtrl.text = d.name;
     });
   }
 
@@ -526,7 +526,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
 
   PricePeriod _defaultPeriodForType(ListingType t) {
     if (t == ListingType.roommate) return PricePeriod.monthly;
-    return PricePeriod.once; // ✅ item + diğer türler => Tek Sefer
+    return PricePeriod.once;
   }
 
   int _remainingPickCount() {
@@ -1014,6 +1014,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                       width: 84,
                       height: 84,
                       fit: BoxFit.cover,
+                      filterQuality: FilterQuality.low,
                     ),
                   ),
                   Positioned(
@@ -1186,188 +1187,225 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     ]);
   }
 
+  // ✅ BUTONLAR sabit altta (klavye stabil)
+  Widget _bottomButtons() {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _loading ? null : () => _save(publish: false),
+                child: _loading
+                    ? const Text('...')
+                    : const Text('Taslak Kaydet'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: _loading ? null : () => _save(publish: true),
+                child: _loading
+                    ? const Text('...')
+                    : Text(widget.isEdit ? 'Güncelle + Yayınla' : 'Yayınla'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // ✅ ilan türlerini sırayla göster
+    final typeItems = [...ListingType.values]
+      ..sort((a, b) => a.order.compareTo(b.order));
+
     final phoneText = _loadingPhone
         ? 'Telefon: yükleniyor...'
         : (_myPhone == null || _myPhone!.trim().isEmpty)
         ? 'Telefon: Profilinde yok (Profilim’den ekleyebilirsin)'
         : 'Telefon (profil): ${_myPhone!}';
 
-    // ✅ ilan türlerini sırayla göster
-    final typeItems = [...ListingType.values]
-      ..sort((a, b) => a.order.compareTo(b.order));
-
-    // ✅ Klavye açılınca alttan boşluk bırak
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
     return Scaffold(
-      // ✅ farklı ekranlarda + klavyede taşmayı engeller
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
         title: Text(widget.isEdit ? 'İlanı Düzenle' : 'İlan Yayınla'),
       ),
+      bottomNavigationBar: _bottomButtons(),
       body: SafeArea(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => FocusScope.of(context).unfocus(),
           child: AbsorbPointer(
             absorbing: _loading,
-            child: ListView(
+            child: CustomScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.fromLTRB(12, 12, 12, 12 + bottomInset),
-              children: [
-                _card('Temel Bilgiler', [
-                  DropdownButtonFormField<ListingType>(
-                    value: _type,
-                    decoration: const InputDecoration(labelText: 'İlan Türü'),
-                    items: typeItems
-                        .map(
-                          (t) =>
-                              DropdownMenuItem(value: t, child: Text(t.label)),
-                        )
-                        .toList(),
-                    onChanged: widget.isEdit
-                        ? null
-                        : (v) {
-                            if (v == null) return;
-                            setState(() {
-                              _type = v;
-                              _pricePeriod = _defaultPeriodForType(v);
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _card('Temel Bilgiler', [
+                        DropdownButtonFormField<ListingType>(
+                          value: _type,
+                          decoration: const InputDecoration(
+                            labelText: 'İlan Türü',
+                          ),
+                          items: typeItems
+                              .map(
+                                (t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text(t.label),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: widget.isEdit
+                              ? null
+                              : (v) {
+                                  if (v == null) return;
+                                  setState(() {
+                                    _type = v;
+                                    _pricePeriod = _defaultPeriodForType(v);
 
-                              if (_type != ListingType.roommate)
-                                _billsIncluded = false;
-                              if (_type != ListingType.item)
-                                _itemCategory = ItemCategory.all;
-                            });
-                          },
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _titleCtrl,
-                    decoration: const InputDecoration(labelText: 'Başlık *'),
-                  ),
-                  if (_type == ListingType.item) ...[
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<ItemCategory>(
-                      value: _itemCategory,
-                      decoration: const InputDecoration(labelText: 'Kategori'),
-                      items: ItemCategory.values
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c,
-                              child: Text(c.label),
+                                    if (_type != ListingType.roommate)
+                                      _billsIncluded = false;
+                                    if (_type != ListingType.item)
+                                      _itemCategory = ItemCategory.all;
+                                  });
+                                },
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _titleCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Başlık *',
+                          ),
+                          textInputAction: TextInputAction.next,
+                        ),
+                        if (_type == ListingType.item) ...[
+                          const SizedBox(height: 10),
+                          DropdownButtonFormField<ItemCategory>(
+                            value: _itemCategory,
+                            decoration: const InputDecoration(
+                              labelText: 'Kategori',
                             ),
-                          )
-                          .toList(),
-                      onChanged: (v) =>
-                          setState(() => _itemCategory = v ?? _itemCategory),
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _descCtrl,
-                    decoration: const InputDecoration(labelText: 'Açıklama'),
-                    maxLines: 4,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(phoneText, style: Theme.of(context).textTheme.bodySmall),
-                ]),
-                _dopingSection(),
-                _photoManagementSection(),
-                _existingImagesSection(),
-                _newImagesSection(),
-                _locationSection(),
-                _card('Fiyat', [
-                  TextField(
-                    controller: _priceCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Fiyat (Tek Sefer) *',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  if (_type == ListingType.roommate)
-                    DropdownButtonFormField<PricePeriod>(
-                      value: _pricePeriod,
-                      decoration: const InputDecoration(
-                        labelText: 'Fiyat Periyodu',
-                      ),
-                      items: PricePeriod.values
-                          .map(
-                            (p) => DropdownMenuItem(
-                              value: p,
-                              child: Text(p.label),
+                            items: ItemCategory.values
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(c.label),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(
+                              () => _itemCategory = v ?? _itemCategory,
                             ),
-                          )
-                          .toList(),
-                      onChanged: (v) =>
-                          setState(() => _pricePeriod = v ?? _pricePeriod),
-                    ),
-                  const SizedBox(height: 10),
-                  if (_type == ListingType.roommate)
-                    SwitchListTile(
-                      value: _billsIncluded,
-                      onChanged: (v) => setState(() => _billsIncluded = v),
-                      title: const Text('Faturalar dahil mi? (Ev Arkadaşı)'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  SwitchListTile(
-                    value: _urgent,
-                    onChanged: (v) => setState(() => _urgent = v),
-                    title: const Text('Acil / öne çıkar'),
-                    contentPadding: EdgeInsets.zero,
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _descCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Açıklama',
+                          ),
+                          maxLines: 4,
+                          textInputAction: TextInputAction.newline,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          phoneText,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ]),
+                      _dopingSection(),
+                      _photoManagementSection(),
+
+                      // ✅ klavye animasyonunda repaint azalsın
+                      RepaintBoundary(child: _existingImagesSection()),
+                      RepaintBoundary(child: _newImagesSection()),
+
+                      _locationSection(),
+                      _card('Fiyat', [
+                        TextField(
+                          controller: _priceCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Fiyat (Tek Sefer) *',
+                          ),
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 10),
+                        if (_type == ListingType.roommate)
+                          DropdownButtonFormField<PricePeriod>(
+                            value: _pricePeriod,
+                            decoration: const InputDecoration(
+                              labelText: 'Fiyat Periyodu',
+                            ),
+                            items: PricePeriod.values
+                                .map(
+                                  (p) => DropdownMenuItem(
+                                    value: p,
+                                    child: Text(p.label),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(
+                              () => _pricePeriod = v ?? _pricePeriod,
+                            ),
+                          ),
+                        const SizedBox(height: 10),
+                        if (_type == ListingType.roommate)
+                          SwitchListTile(
+                            value: _billsIncluded,
+                            onChanged: (v) =>
+                                setState(() => _billsIncluded = v),
+                            title: const Text(
+                              'Faturalar dahil mi? (Ev Arkadaşı)',
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        SwitchListTile(
+                          value: _urgent,
+                          onChanged: (v) => setState(() => _urgent = v),
+                          title: const Text('Acil / öne çıkar'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        if (_isBasicOtherType)
+                          Text(
+                            'Bu ilan türünde sadece temel alanlar var (başlık, açıklama, foto, konum, fiyat).',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ]),
+                      _card('Ev Arkadaşı (Özel)', [
+                        if (_type == ListingType.roommate)
+                          TextField(
+                            controller: _roomCountCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Ev Oda Sayısı (örn: 2+1)',
+                            ),
+                            textInputAction: TextInputAction.done,
+                          ),
+                        if (_type != ListingType.roommate)
+                          const Text(
+                            'Bu bölüm sadece Ev Arkadaşı ilanlarında kullanılır.',
+                          ),
+                      ]),
+                      _rulesSection(),
+                      _preferencesSection(),
+
+                      const SizedBox(height: 24), // altta sabit butonlar var
+                    ]),
                   ),
-                  if (_isBasicOtherType)
-                    Text(
-                      'Bu ilan türünde sadece temel alanlar var (başlık, açıklama, foto, konum, fiyat).',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ]),
-                _card('Ev Arkadaşı (Özel)', [
-                  if (_type == ListingType.roommate)
-                    TextField(
-                      controller: _roomCountCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Ev Oda Sayısı (örn: 2+1)',
-                      ),
-                    ),
-                  if (_type != ListingType.roommate)
-                    const Text(
-                      'Bu bölüm sadece Ev Arkadaşı ilanlarında kullanılır.',
-                    ),
-                ]),
-                _rulesSection(),
-                _preferencesSection(),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _loading
-                            ? null
-                            : () => _save(publish: false),
-                        child: _loading
-                            ? const Text('...')
-                            : const Text('Taslak Kaydet'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _loading ? null : () => _save(publish: true),
-                        child: _loading
-                            ? const Text('...')
-                            : Text(
-                                widget.isEdit
-                                    ? 'Güncelle + Yayınla'
-                                    : 'Yayınla',
-                              ),
-                      ),
-                    ),
-                  ],
+                ),
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: SizedBox.shrink(),
                 ),
               ],
             ),

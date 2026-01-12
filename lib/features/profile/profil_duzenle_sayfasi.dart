@@ -23,9 +23,13 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   bool _loading = true;
   bool _saving = false;
 
+  // ✅ Yeni seçilen foto
   Uint8List? _avatarBytes;
+
+  // ✅ Eski kayıtlı foto (NetworkImage yok → Storage’dan indirip MemoryImage yapıyoruz)
+  Uint8List? _existingAvatarBytes;
   String _existingAvatarPath = '';
-  String? _cachedSignedUrl;
+  bool _loadingAvatar = false;
 
   String _initialCityName = '';
   String _initialDistrictName = '';
@@ -69,7 +73,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   // ===================== DB LOADERS =====================
 
   Future<void> _loadCities() async {
-    setState(() => _loadingCities = true);
+    if (mounted) setState(() => _loadingCities = true);
 
     try {
       final res = await supabase
@@ -100,11 +104,13 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   }
 
   Future<void> _loadDistrictsOfCityId(int cityId) async {
-    setState(() {
-      _loadingDistricts = true;
-      _districts = [];
-      _selectedDistrictName = null;
-    });
+    if (mounted) {
+      setState(() {
+        _loadingDistricts = true;
+        _districts = [];
+        _selectedDistrictName = null;
+      });
+    }
 
     try {
       final res = await supabase
@@ -134,16 +140,45 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     }
   }
 
+  // ===================== AVATAR LOAD (NO NETWORK IMAGE) =====================
+
+  Future<void> _loadExistingAvatarBytesIfNeeded() async {
+    // Yeni foto seçildiyse eskiyi indirmeye gerek yok
+    if (_avatarBytes != null) return;
+
+    final path = _existingAvatarPath.trim();
+    if (path.isEmpty) return;
+
+    if (mounted) setState(() => _loadingAvatar = true);
+
+    try {
+      final bytes = await supabase.storage.from('avatars').download(path);
+      if (!mounted) return;
+
+      // Eğer bu arada kullanıcı yeni foto seçtiyse, eskiyi ezme
+      if (_avatarBytes == null) {
+        setState(() => _existingAvatarBytes = bytes);
+      }
+    } catch (_) {
+      // Sessiz geç: avatar yoksa icon kalsın
+    } finally {
+      if (mounted) setState(() => _loadingAvatar = false);
+    }
+  }
+
   // ===================== PROFILE LOAD =====================
 
   Future<void> _profiliYukle() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    setState(() {
-      _loading = true;
-      _cachedSignedUrl = null;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _existingAvatarBytes = null; // yenilemede tekrar indir
+        _existingAvatarPath = '';
+      });
+    }
 
     try {
       final data = await supabase
@@ -155,15 +190,13 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
       _adController.text = (data?['full_name'] ?? '').toString();
       _telefonController.text = (data?['phone'] ?? '').toString();
       _bioController.text = (data?['bio'] ?? '').toString();
-      _existingAvatarPath = (data?['avatar_path'] ?? '').toString();
 
       _initialCityName = (data?['city'] ?? '').toString().trim();
       _initialDistrictName = (data?['district'] ?? '').toString().trim();
 
-      if (_existingAvatarPath.trim().isNotEmpty) {
-        _cachedSignedUrl = await _signedAvatarUrl(_existingAvatarPath);
-      }
+      _existingAvatarPath = (data?['avatar_path'] ?? '').toString();
 
+      // ✅ City eşle
       if (_initialCityName.isNotEmpty && _cities.isNotEmpty) {
         final row = _cities.firstWhere(
           (x) =>
@@ -183,19 +216,18 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
           await _loadDistrictsOfCityId(id);
 
-          if (_initialDistrictName.isNotEmpty &&
-              _districts.any(
-                (d) => d.toLowerCase() == _initialDistrictName.toLowerCase(),
-              )) {
-            _selectedDistrictName = _districts.firstWhere(
+          if (_initialDistrictName.isNotEmpty) {
+            final match = _districts.firstWhere(
               (d) => d.toLowerCase() == _initialDistrictName.toLowerCase(),
               orElse: () => _initialDistrictName,
             );
+            _selectedDistrictName = match;
           }
         }
       }
 
-      if (!mounted) return;
+      // ✅ Eski avatarı Storage’dan indir (NetworkImage yok)
+      await _loadExistingAvatarBytesIfNeeded();
     } catch (e) {
       if (!mounted) return;
       _snack('Profil okunamadı: $e');
@@ -218,7 +250,10 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
     final bytes = await picked.readAsBytes();
     if (!mounted) return;
-    setState(() => _avatarBytes = bytes);
+
+    setState(() {
+      _avatarBytes = bytes; // ✅ yeni seçilen öncelikli
+    });
   }
 
   Future<String?> _fotoYuklePath(String uid) async {
@@ -239,16 +274,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
         );
 
     return path;
-  }
-
-  Future<String?> _signedAvatarUrl(String path) async {
-    if (path.isEmpty) return null;
-
-    final url = await supabase.storage
-        .from('avatars')
-        .createSignedUrl(path, 60 * 60);
-    final bust = DateTime.now().millisecondsSinceEpoch;
-    return '$url${url.contains('?') ? '&' : '?'}cb=$bust';
   }
 
   // ===================== SAVE =====================
@@ -394,14 +419,14 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   }
 
   Widget _buildBody(BuildContext context) {
-    ImageProvider? bg;
+    // ✅ Öncelik: yeni seçilen foto -> eski indirilen foto -> icon
+    final ImageProvider? bg = (_avatarBytes != null)
+        ? MemoryImage(_avatarBytes!)
+        : (_existingAvatarBytes != null)
+        ? MemoryImage(_existingAvatarBytes!)
+        : null;
 
-    if (_avatarBytes != null) {
-      bg = MemoryImage(_avatarBytes!);
-    } else if ((_cachedSignedUrl ?? '').trim().isNotEmpty) {
-      bg = NetworkImage(_cachedSignedUrl!);
-    }
-
+    // ✅ İlan oluştur sayfası gibi: ListView + viewInsets.bottom padding
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return GestureDetector(
@@ -409,82 +434,103 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
       onTap: () => FocusScope.of(context).unfocus(),
       child: Stack(
         children: [
-          // ✅ SingleChildScrollView yerine ListView: klavye + dropdown daha stabil
-          ListView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
-            children: [
-              Center(
-                child: GestureDetector(
-                  onTap: _saving ? null : _fotoSec,
-                  child: CircleAvatar(
-                    radius: 54,
-                    backgroundColor: Colors.grey.shade200,
-                    backgroundImage: bg,
-                    child: bg == null
-                        ? const Icon(Icons.camera_alt, size: 32)
-                        : null,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _adController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Ad Soyad',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _telefonController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Telefon',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 12),
-              _cityDropdown(),
-              const SizedBox(height: 12),
-              _districtDropdown(),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _bioController,
-                decoration: const InputDecoration(
-                  labelText: 'Hakkımda',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kTurkuaz,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+          AbsorbPointer(
+            absorbing: _saving,
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+              children: [
+                Center(
+                  child: GestureDetector(
+                    onTap: _saving ? null : _fotoSec,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 54,
+                          backgroundColor: Colors.grey.shade200,
+                          backgroundImage: bg,
+                          child: bg == null
+                              ? const Icon(Icons.camera_alt, size: 32)
+                              : null,
+                        ),
+                        if (_loadingAvatar)
+                          const Positioned.fill(
+                            child: Center(
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                  onPressed: _saving ? null : _kaydet,
-                  child: Text(_saving ? 'Kaydediliyor...' : 'Kaydet'),
                 ),
-              ),
-              const SizedBox(height: 24),
-            ],
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _adController,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Ad Soyad',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _telefonController,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Telefon',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 12),
+                _cityDropdown(),
+                const SizedBox(height: 12),
+                _districtDropdown(),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _bioController,
+                  decoration: const InputDecoration(
+                    labelText: 'Hakkımda',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                  textInputAction: TextInputAction.newline,
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kTurkuaz,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: _saving ? null : _kaydet,
+                    child: Text(_saving ? 'Kaydediliyor...' : 'Kaydet'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
-
           if (_saving)
-            AbsorbPointer(
-              absorbing: true,
-              child: Container(
-                color: Colors.black.withOpacity(0.15),
-                child: const Center(child: CircularProgressIndicator()),
+            Positioned.fill(
+              child: AbsorbPointer(
+                absorbing: true,
+                child: Container(
+                  color: Colors.black.withOpacity(0.15),
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
               ),
             ),
         ],
@@ -495,7 +541,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✅ klavye açılınca resize
+      // ✅ İlan oluştur ile aynı klavye davranışı
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: kTurkuaz,
@@ -508,7 +554,12 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
         actions: [
           IconButton(
             tooltip: 'Yenile',
-            onPressed: _saving ? null : _initLoad,
+            onPressed: _saving
+                ? null
+                : () async {
+                    // Yenile: yeni seçilen foto kalsın mı? (kalsın)
+                    await _initLoad();
+                  },
             icon: const Icon(Icons.refresh),
           ),
         ],

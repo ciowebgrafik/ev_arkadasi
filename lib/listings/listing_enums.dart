@@ -2,11 +2,10 @@
 import 'package:flutter/material.dart';
 
 /// ✅ İlan Türleri (DB'de string olarak saklanır)
-/// roommate, item bölümleri zaten çalışıyor.
 enum ListingType {
   roommate, // Ev Arkadaşı
   item, // Ev Eşyası
-  // ✅ Yeni türler
+  // ✅ Hizmet / diğer kategoriler
   transport, // Nakliye Hizmetleri
   repair, // Dekorasyon / Onarım
   local, // Yakınımdaki Küçük Esnaf   (DB: local_shop)
@@ -15,7 +14,7 @@ enum ListingType {
   daily_job, // Günlük İş            (DB: daily_job)
 }
 
-/// ✅ Fiyat periyodu (şimdilik sadece Tek Sefer kullanacağız)
+/// ✅ Fiyat periyodu
 enum PricePeriod { once, daily, weekly, monthly, yearly }
 
 // ================= DB <-> ENUM (safe) =================
@@ -26,7 +25,7 @@ ListingType listingTypeFromDb(String v) {
   // ✅ DB'de local_shop var -> enum local
   if (value == 'local_shop') return ListingType.local;
 
-  // ✅ eski verilerde job varsa daily_job'a çevir
+  // ✅ eski verilerde job varsa daily_job'a çevir (geriye uyumluluk)
   if (value == 'job') return ListingType.daily_job;
 
   return ListingType.values.firstWhere(
@@ -50,7 +49,8 @@ String listingTypeToDb(ListingType v) {
     case ListingType.local:
       return 'local_shop';
     default:
-      return v.name; // roommate,item,transport,repair,cleaning,pet,daily_job
+      // roommate,item,transport,repair,cleaning,pet,daily_job
+      return v.name;
   }
 }
 

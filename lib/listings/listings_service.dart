@@ -32,20 +32,13 @@ class ListingsService {
   }
 
   // ✅ TR normalize: İ/ı/I sorunlarını düzelt + boşlukları toparla
-  // Amaç: arama ve filtrelerde tutarlılık
   String _norm(String s) {
     var t = s.trim();
     if (t.isEmpty) return '';
 
-    // Türkçe özel harfleri normalize et
-    // NOT: toLowerCase() öncesinde İ/I düzeltmesi yapıyoruz
     t = t.replaceAll('İ', 'i').replaceAll('I', 'ı');
-
-    // küçük harf
     t = t.toLowerCase();
 
-    // kalan Türkçe karakterleri "yakın" karşılığa çek (opsiyonel ama aramayı güçlendirir)
-    // örn: Ş->s, Ğ->g, Ç->c, Ö->o, Ü->u, ı->i
     t = t
         .replaceAll('ş', 's')
         .replaceAll('ğ', 'g')
@@ -54,9 +47,7 @@ class ListingsService {
         .replaceAll('ü', 'u')
         .replaceAll('ı', 'i');
 
-    // fazla boşlukları tek boşluğa indir
     t = t.replaceAll(RegExp(r'\s+'), ' ');
-
     return t;
   }
 
@@ -107,7 +98,7 @@ class ListingsService {
       'details': mergedDetails,
       'rules': _cleanJson(rules),
       'preferences': _cleanJson(preferences),
-      'status': status,
+      'status': status.trim(),
     };
 
     final res = await _db
@@ -155,6 +146,7 @@ class ListingsService {
       'rules': _cleanJson(rules),
       'preferences': _cleanJson(preferences),
       if (status != null) 'status': status.trim(),
+      'updated_at': DateTime.now().toIso8601String(),
     };
 
     await _db
@@ -176,7 +168,26 @@ class ListingsService {
     if (preferences != null) payload['preferences'] = _cleanJson(preferences);
     if (payload.isEmpty) return;
 
+    payload['updated_at'] = DateTime.now().toIso8601String();
     await _db.from('listings').update(payload).eq('id', listingId);
+  }
+
+  // ===================== ✅ İLANI KALDIR (soft remove) =====================
+  /// ENUM’ünde removed yok.
+  /// Senin enum: draft, published, paused, sold, closed, deleted
+  /// Bu yüzden “kaldır” = paused
+  Future<void> removeListing({required String listingId}) async {
+    final user = _db.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    await _db
+        .from('listings')
+        .update({
+          'status': 'paused',
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', listingId)
+        .eq('owner_id', user.id);
   }
 
   // ===================== Photos =====================
@@ -224,7 +235,10 @@ class ListingsService {
   }) async {
     await _db
         .from('listings')
-        .update({'image_paths': imagePaths})
+        .update({
+          'image_paths': imagePaths,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
         .eq('id', listingId);
   }
 
@@ -325,6 +339,9 @@ class ListingsService {
 
   // ===================== Select =====================
 
+  /// ✅ ÖNEMLİ DEĞİŞİKLİK:
+  /// status parametresi NULL/BOŞ gelirse bile "paused" (kaldırılmış) ilanları göstermiyoruz.
+  /// Böylece "kaldırdığım ilanlar hâlâ ilanlarda çıkıyor" sorunu bitiyor.
   Future<List<Map<String, dynamic>>> fetchListings({
     ListingType? type,
     PricePeriod? pricePeriod,
@@ -339,8 +356,19 @@ class ListingsService {
         .from('listings')
         .select('*, profiles!listings_owner_id_fkey(full_name, phone)');
 
-    if (status != null && status.trim().isNotEmpty) {
-      q = q.eq('status', status.trim());
+    final st = (status ?? '').trim();
+
+    if (st.isNotEmpty) {
+      // status verilmişse aynen uygula (genelde published)
+      q = q.eq('status', st);
+    } else {
+      // status verilmemişse bile kaldırılanları/kapalıları göstermeyelim
+      q = q
+          .neq('status', 'paused')
+          .neq('status', 'deleted')
+          .neq('status', 'closed')
+          .neq('status', 'sold')
+          .neq('status', 'draft'); // taslaklar da public listede çıkmasın
     }
 
     if (type != null) q = q.eq('type', listingTypeToDb(type));
@@ -348,11 +376,8 @@ class ListingsService {
       q = q.eq('price_period', pricePeriodToDb(pricePeriod));
     }
 
-    // ✅ şehir/ilçe filtrelerini TR normalize ile arat
     if (city != null && city.trim().isNotEmpty) {
       final c = _norm(city);
-      // NOT: city kolonunda asıl değer "Adana" gibi durur,
-      // ilike case-insensitive olduğu için %c% yeterli (norm sadece sağlamlaştırma)
       q = q.ilike('city', '%$c%');
     }
 
@@ -395,7 +420,10 @@ class ListingsService {
 
     await _db
         .from('listings')
-        .update({'status': 'published'})
+        .update({
+          'status': 'published',
+          'updated_at': DateTime.now().toIso8601String(),
+        })
         .eq('id', listingId)
         .eq('owner_id', user.id);
   }

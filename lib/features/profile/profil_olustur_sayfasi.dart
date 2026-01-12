@@ -297,9 +297,7 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
           .toList(),
       onChanged: disabled
           ? null
-          : (v) {
-              setState(() => _selectedDistrictName = v);
-            },
+          : (v) => setState(() => _selectedDistrictName = v),
       decoration: InputDecoration(
         labelText: 'İlçe',
         border: const OutlineInputBorder(),
@@ -314,10 +312,8 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
     return Scaffold(
-      // ✅ Klavye + küçük ekranlarda taşmayı azaltır
+      // ✅ Klavye açılınca otomatik ittir (stabil)
       resizeToAvoidBottomInset: true,
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -344,89 +340,112 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => FocusScope.of(context).unfocus(),
-          child: Stack(
-            children: [
-              SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 20 + bottomInset),
-                child: Column(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final bottom = MediaQuery.of(context).viewInsets.bottom;
+
+              return AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: bottom),
+                child: Stack(
                   children: [
-                    GestureDetector(
-                      onTap: _saving ? null : _fotoSec,
-                      child: CircleAvatar(
-                        radius: 52,
-                        backgroundColor: Colors.grey.shade200,
-                        backgroundImage: _avatarBytes != null
-                            ? MemoryImage(_avatarBytes!)
-                            : null,
-                        child: _avatarBytes == null
-                            ? const Icon(Icons.camera_alt, size: 32)
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: _adController,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Ad Soyad',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _telefonController,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Telefon',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.phone,
-                    ),
-                    const SizedBox(height: 12),
-                    _cityDropdown(),
-                    const SizedBox(height: 12),
-                    _districtDropdown(),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _bioController,
-                      decoration: const InputDecoration(
-                        labelText: 'Hakkımda',
-                        border: OutlineInputBorder(),
-                      ),
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: kTurkuaz,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    SingleChildScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
+                        child: IntrinsicHeight(
+                          child: Column(
+                            children: [
+                              GestureDetector(
+                                onTap: _saving ? null : _fotoSec,
+                                child: CircleAvatar(
+                                  radius: 52,
+                                  backgroundColor: Colors.grey.shade200,
+                                  backgroundImage: _avatarBytes != null
+                                      ? MemoryImage(_avatarBytes!)
+                                      : null,
+                                  child: _avatarBytes == null
+                                      ? const Icon(Icons.camera_alt, size: 32)
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              TextField(
+                                controller: _adController,
+                                textInputAction: TextInputAction.next,
+                                decoration: const InputDecoration(
+                                  labelText: 'Ad Soyad',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _telefonController,
+                                textInputAction: TextInputAction.next,
+                                decoration: const InputDecoration(
+                                  labelText: 'Telefon',
+                                  border: OutlineInputBorder(),
+                                ),
+                                keyboardType: TextInputType.phone,
+                              ),
+                              const SizedBox(height: 12),
+                              _cityDropdown(),
+                              const SizedBox(height: 12),
+                              _districtDropdown(),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _bioController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Hakkımda',
+                                  border: OutlineInputBorder(),
+                                ),
+                                maxLines: 3,
+                                textInputAction: TextInputAction.newline,
+                              ),
+                              const SizedBox(height: 24),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 52,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: kTurkuaz,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  onPressed: _saving ? null : _kaydet,
+                                  child: Text(
+                                    _saving ? 'Kaydediliyor...' : 'Kaydet',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 40),
+                            ],
                           ),
                         ),
-                        onPressed: _saving ? null : _kaydet,
-                        child: Text(_saving ? 'Kaydediliyor...' : 'Kaydet'),
                       ),
                     ),
-                    const SizedBox(height: 40),
+
+                    if (_saving)
+                      AbsorbPointer(
+                        absorbing: true,
+                        child: Container(
+                          color: Colors.black.withOpacity(0.15),
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-              ),
-
-              if (_saving)
-                AbsorbPointer(
-                  absorbing: true,
-                  child: Container(
-                    color: Colors.black.withOpacity(0.15),
-                    child: const Center(child: CircularProgressIndicator()),
-                  ),
-                ),
-            ],
+              );
+            },
           ),
         ),
       ),
