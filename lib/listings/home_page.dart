@@ -3,9 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../features/auth/auth_gate.dart';
 import '../features/profile/profil_sayfasi.dart';
+import 'admin_panel_page.dart';
 import 'favorites_page.dart';
 import 'listing_create_page.dart';
-import 'listing_enums.dart'; // ✅ ListingType için gerekli
+import 'listing_enums.dart';
 import 'listing_list_page.dart';
 import 'my_listings_page.dart';
 
@@ -26,6 +27,10 @@ class _HomePageState extends State<HomePage> {
   String? avatarUrl; // signed url
   String avatarPath = '';
 
+  // ✅ Admin kontrol
+  bool _isAdmin = false;
+  bool _loadingAdmin = true;
+
   @override
   void initState() {
     super.initState();
@@ -36,12 +41,18 @@ class _HomePageState extends State<HomePage> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    setState(() => _loading = true);
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadingAdmin = true;
+      });
+    }
 
     try {
+      // ✅ is_admin çekiyoruz (kolon NULL olabiliyorsa: == true ile güvenli)
       final data = await supabase
           .from('profiles')
-          .select('full_name, avatar_path')
+          .select('full_name, avatar_path, is_admin')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -51,12 +62,19 @@ class _HomePageState extends State<HomePage> {
       displayName = name.isNotEmpty ? name : 'Kullanıcı';
       avatarPath = path;
 
+      _isAdmin = data?['is_admin'] == true;
+
       avatarUrl = await _createSignedAvatarUrl(path);
     } catch (e) {
       if (!mounted) return;
       _snack('Profil okunamadı: $e');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadingAdmin = false;
+        });
+      }
     }
   }
 
@@ -216,6 +234,26 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // ✅ Admin Panel aç
+  Future<void> _openAdminPanel() async {
+    if (_loadingAdmin) {
+      _snack('Admin kontrol ediliyor...');
+      return;
+    }
+    if (!_isAdmin) {
+      _snack('Bu sayfaya erişimin yok.');
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminPanelPage()),
+    );
+
+    if (!mounted) return;
+    await _loadMe();
+  }
+
   // ================= DRAWER =================
 
   Drawer _buildDrawer() {
@@ -275,6 +313,20 @@ class _HomePageState extends State<HomePage> {
                 Future.microtask(_openMyListings);
               },
             ),
+
+            // ✅ Admin Panel (sadece admin)
+            if (!_loadingAdmin && _isAdmin) ...[
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.admin_panel_settings_outlined),
+                title: const Text('Admin Panel'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Future.microtask(_openAdminPanel);
+                },
+              ),
+            ],
+
             const Spacer(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.redAccent),
@@ -419,15 +471,24 @@ class _HomePageState extends State<HomePage> {
                 await _openFavorites();
               } else if (v == 'my_listings') {
                 await _openMyListings();
+              } else if (v == 'admin') {
+                await _openAdminPanel();
               } else if (v == 'logout') {
                 await _signOut();
               }
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'favorites', child: Text('Favoriler')),
-              PopupMenuItem(value: 'my_listings', child: Text('İlanlarım')),
-              PopupMenuDivider(),
-              PopupMenuItem(value: 'logout', child: Text('Çıkış')),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'favorites', child: Text('Favoriler')),
+              const PopupMenuItem(
+                value: 'my_listings',
+                child: Text('İlanlarım'),
+              ),
+              if (!_loadingAdmin && _isAdmin) ...const [
+                PopupMenuDivider(),
+                PopupMenuItem(value: 'admin', child: Text('Admin Panel')),
+              ],
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'logout', child: Text('Çıkış')),
             ],
           ),
           const SizedBox(width: 6),
@@ -446,7 +507,6 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.only(top: 16, bottom: 16),
                 children: [
                   const SizedBox(height: 22),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -455,7 +515,6 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openCreateListing,
                   ),
                   const SizedBox(height: 16),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -464,7 +523,6 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openRoommateListings,
                   ),
                   const SizedBox(height: 16),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -473,7 +531,6 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openItemListings,
                   ),
                   const SizedBox(height: 16),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -482,7 +539,6 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openFindBestRoommate,
                   ),
                   const SizedBox(height: 16),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -491,7 +547,6 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openMovingServices,
                   ),
                   const SizedBox(height: 16),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -500,7 +555,6 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openRepair,
                   ),
                   const SizedBox(height: 16),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -509,7 +563,6 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openNearbyTrades,
                   ),
                   const SizedBox(height: 16),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -518,7 +571,6 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openCleaning,
                   ),
                   const SizedBox(height: 16),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -527,7 +579,6 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openPetAdoption,
                   ),
                   const SizedBox(height: 16),
-
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -536,9 +587,7 @@ class _HomePageState extends State<HomePage> {
                     onTap: _openDailyJobs,
                   ),
                   const SizedBox(height: 18),
-
                   _adSlot(width: safeWidth, alignRight: false),
-
                   const SizedBox(height: 18),
                   Center(
                     child: Text(

@@ -173,9 +173,7 @@ class ListingsService {
   }
 
   // ===================== ✅ İLANI KALDIR (soft remove) =====================
-  /// ENUM’ünde removed yok.
-  /// Senin enum: draft, published, paused, sold, closed, deleted
-  /// Bu yüzden “kaldır” = paused
+  /// “kaldır” = paused
   Future<void> removeListing({required String listingId}) async {
     final user = _db.auth.currentUser;
     if (user == null) throw Exception('Giriş yapılmamış.');
@@ -339,9 +337,8 @@ class ListingsService {
 
   // ===================== Select =====================
 
-  /// ✅ ÖNEMLİ DEĞİŞİKLİK:
-  /// status parametresi NULL/BOŞ gelirse bile "paused" (kaldırılmış) ilanları göstermiyoruz.
-  /// Böylece "kaldırdığım ilanlar hâlâ ilanlarda çıkıyor" sorunu bitiyor.
+  /// ✅ Public liste: default published (senin ListingListPage zaten published çekiyor)
+  /// status boş verilirse bile paused/draft/closed/sold/deleted gösterme.
   Future<List<Map<String, dynamic>>> fetchListings({
     ListingType? type,
     PricePeriod? pricePeriod,
@@ -359,16 +356,16 @@ class ListingsService {
     final st = (status ?? '').trim();
 
     if (st.isNotEmpty) {
-      // status verilmişse aynen uygula (genelde published)
       q = q.eq('status', st);
     } else {
-      // status verilmemişse bile kaldırılanları/kapalıları göstermeyelim
       q = q
           .neq('status', 'paused')
           .neq('status', 'deleted')
           .neq('status', 'closed')
           .neq('status', 'sold')
-          .neq('status', 'draft'); // taslaklar da public listede çıkmasın
+          .neq('status', 'draft')
+          .neq('status', 'pending') // ✅ onayda olan public listede görünmesin
+          .neq('status', 'rejected'); // ✅ reddedilen de görünmesin
     }
 
     if (type != null) q = q.eq('type', listingTypeToDb(type));
@@ -414,14 +411,30 @@ class ListingsService {
     return List<Map<String, dynamic>>.from(res);
   }
 
+  // ✅ DEĞİŞİKLİK: republishListing artık published yapmaz -> pending (admin onay)
   Future<void> republishListing(String listingId) async {
     final user = _db.auth.currentUser;
     if (user == null) throw Exception('Giriş yapılmamış.');
 
+    // (opsiyonel) zaten pending ise güncelleme yapmayalım
+    try {
+      final cur = await _db
+          .from('listings')
+          .select('status')
+          .eq('id', listingId)
+          .eq('owner_id', user.id)
+          .maybeSingle();
+
+      final st = (cur?['status'] ?? '').toString().toLowerCase().trim();
+      if (st == 'pending') return;
+    } catch (_) {
+      // ignore, yine de update deneriz
+    }
+
     await _db
         .from('listings')
         .update({
-          'status': 'published',
+          'status': 'pending',
           'updated_at': DateTime.now().toIso8601String(),
         })
         .eq('id', listingId)

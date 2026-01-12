@@ -298,6 +298,22 @@ class _ListingListPageState extends State<ListingListPage> {
     }
   }
 
+  int _boostRank(Map<String, dynamic> item) {
+    if (!_isBoostActive(item)) return 0;
+    final details = _detailsOf(item);
+    final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
+    switch (plan) {
+      case 'gold':
+        return 3;
+      case 'silver':
+        return 2;
+      case 'bronze':
+        return 1;
+    }
+    // eski fallback: boosted true ise brnz say
+    return details['boosted'] == true ? 1 : 0;
+  }
+
   String _boostLabel(Map<String, dynamic> item) {
     final details = _detailsOf(item);
     final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
@@ -384,7 +400,6 @@ class _ListingListPageState extends State<ListingListPage> {
       'calis',
     ])) {
       if (ListingType.values.map((e) => e.name).contains('job')) {
-        // Eğer enum'da job varsa
         out.add(ListingType.values.byName('job'));
       }
     }
@@ -427,7 +442,7 @@ class _ListingListPageState extends State<ListingListPage> {
 
     var query = _sb.from('listings').select('*');
 
-    // ✅ SADECE YAYINDAKİLERİ GÖSTER (paused/draft/sold/closed/deleted gelmesin)
+    // ✅ SADECE YAYINDAKİLERİ GÖSTER
     query = query.eq('status', 'published');
 
     // ✅ Tür filtresi (seçiliyse)
@@ -450,13 +465,15 @@ class _ListingListPageState extends State<ListingListPage> {
     if (_selectedCityId != null) {
       query = query.eq('city_id', _selectedCityId!);
     } else if (cityTxt.isNotEmpty) {
-      query = query.ilike('city', cityTxt);
+      // ✅ FIX: ilike pattern olmalı
+      query = query.ilike('city', '%$cityTxt%');
     }
 
     if (_selectedDistrictId != null) {
       query = query.eq('district_id', _selectedDistrictId!);
     } else if (distTxt.isNotEmpty) {
-      query = query.ilike('district', distTxt);
+      // ✅ FIX: ilike pattern olmalı
+      query = query.ilike('district', '%$distTxt%');
     }
 
     // ✅ Arama: başlık/açıklama + (type search)
@@ -472,7 +489,6 @@ class _ListingListPageState extends State<ListingListPage> {
       if (_type == null) {
         final inferred = _inferTypesFromQuery(qTxt);
         for (final t in inferred) {
-          // type.eq.<db>
           orParts.add('type.eq.${listingTypeToDb(t)}');
         }
       }
@@ -480,6 +496,7 @@ class _ListingListPageState extends State<ListingListPage> {
       query = query.or(orParts.join(','));
     }
 
+    // ✅ Sıralama: önce created_at çekelim, sonra localde boost + seçilen sort
     final res = await query.order('created_at', ascending: false);
 
     return (res as List)
@@ -499,6 +516,9 @@ class _ListingListPageState extends State<ListingListPage> {
       if (!mounted) return;
 
       final sorted = List<Map<String, dynamic>>.from(items);
+
+      // ✅ BOOST ÖNCELİKLİ SIRALAMA:
+      // önce boostRank (gold>silver>bronze>none), sonra seçilen sort
       _applySort(sorted);
 
       // ✅ cache reset (liste değişince eski resim/url kalmasın)
@@ -531,35 +551,57 @@ class _ListingListPageState extends State<ListingListPage> {
       return double.tryParse('$p') ?? -1;
     }
 
+    int createdCmp(Map<String, dynamic> a, Map<String, dynamic> b) {
+      final ca = (a['created_at'] ?? '').toString();
+      final cb = (b['created_at'] ?? '').toString();
+      return cb.compareTo(ca); // yeni -> eski
+    }
+
+    // ✅ 1) önce boostRank
+    int boostCmp(Map<String, dynamic> a, Map<String, dynamic> b) {
+      final ra = _boostRank(a);
+      final rb = _boostRank(b);
+      if (ra != rb) return rb.compareTo(ra); // büyük rank öne
+      return 0;
+    }
+
     if (_sort == SortOption.newest) {
       list.sort((a, b) {
-        final ca = (a['created_at'] ?? '').toString();
-        final cb = (b['created_at'] ?? '').toString();
-        return cb.compareTo(ca);
+        final bc = boostCmp(a, b);
+        if (bc != 0) return bc;
+        return createdCmp(a, b);
       });
       return;
     }
 
     if (_sort == SortOption.priceAsc) {
       list.sort((a, b) {
+        final bc = boostCmp(a, b);
+        if (bc != 0) return bc;
+
         final pa = priceOf(a);
         final pb = priceOf(b);
-        if (pa < 0 && pb < 0) return 0;
+        if (pa < 0 && pb < 0) return createdCmp(a, b);
         if (pa < 0) return 1;
         if (pb < 0) return -1;
-        return pa.compareTo(pb);
+        final pc = pa.compareTo(pb);
+        return pc != 0 ? pc : createdCmp(a, b);
       });
       return;
     }
 
     if (_sort == SortOption.priceDesc) {
       list.sort((a, b) {
+        final bc = boostCmp(a, b);
+        if (bc != 0) return bc;
+
         final pa = priceOf(a);
         final pb = priceOf(b);
-        if (pa < 0 && pb < 0) return 0;
+        if (pa < 0 && pb < 0) return createdCmp(a, b);
         if (pa < 0) return 1;
         if (pb < 0) return -1;
-        return pb.compareTo(pa);
+        final pc = pb.compareTo(pa);
+        return pc != 0 ? pc : createdCmp(a, b);
       });
       return;
     }
@@ -1288,10 +1330,10 @@ class _ListingListPageState extends State<ListingListPage> {
 
     if (_isItemTypeSelected) {
       final cat = _itemCategory?.label ?? 'Hepsi';
-      return '🔎 Filtre: $typeLabel • $cat${loc.isEmpty ? "" : " • $loc"}';
+      return '🔎 Filtre: $typeLabel • $cat${loc.isNotEmpty ? " • $loc" : ""}';
     } else {
       final per = _period?.label ?? 'Hepsi';
-      return '🔎 Filtre: $typeLabel • $per${loc.isEmpty ? "" : " • $loc"}';
+      return '🔎 Filtre: $typeLabel • $per${loc.isNotEmpty ? " • $loc" : ""}';
     }
   }
 

@@ -636,6 +636,15 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   // ===========================
+  // ✅ STATUS HELPERS (Admin onaylı akış)
+  // ===========================
+  /// Kullanıcı "Yayınla" dediğinde: pending (admin onayı beklesin)
+  /// Taslak: draft
+  String _statusForAction({required bool publish}) {
+    return publish ? 'pending' : 'draft';
+  }
+
+  // ===========================
   // ✅ SUPABASE DIRECT SAVE
   // ===========================
   Future<String> _supabaseCreateListing({
@@ -723,6 +732,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       'details': details,
       'rules': rules,
       'preferences': preferences,
+      // ✅ kullanıcı published/rejected yapmasın; publish aksiyonu pending'e çeker
       'status': status,
       'updated_at': DateTime.now().toIso8601String(),
     };
@@ -769,7 +779,8 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         return;
       }
 
-      final status = publish ? 'published' : 'draft';
+      // ✅ DEĞİŞİKLİK: Publish -> pending, Draft -> draft
+      final status = _statusForAction(publish: publish);
 
       final finalPeriod = (_type == ListingType.roommate)
           ? _pricePeriod
@@ -845,7 +856,9 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         }
 
         if (!mounted) return;
-        _snack(publish ? 'Güncellendi + Yayınlandı ✅' : 'Güncellendi ✅');
+        _snack(
+          publish ? 'Onaya gönderildi ✅ (pending)' : 'Taslak güncellendi ✅',
+        );
         Navigator.pop(context, true);
         return;
       }
@@ -882,7 +895,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       );
 
       if (!mounted) return;
-      _snack(publish ? 'Yayınlandı ✅' : 'Taslak kaydedildi ✅');
+      _snack(publish ? 'Onaya gönderildi ✅ (pending)' : 'Taslak kaydedildi ✅');
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
@@ -1209,7 +1222,11 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                 onPressed: _loading ? null : () => _save(publish: true),
                 child: _loading
                     ? const Text('...')
-                    : Text(widget.isEdit ? 'Güncelle + Yayınla' : 'Yayınla'),
+                    : Text(
+                        widget.isEdit
+                            ? 'Güncelle + Onaya Gönder'
+                            : 'Onaya Gönder',
+                      ),
               ),
             ),
           ],
@@ -1326,7 +1343,6 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                       _dopingSection(),
                       _photoManagementSection(),
 
-                      // ✅ klavye animasyonunda repaint azalsın
                       RepaintBoundary(child: _existingImagesSection()),
                       RepaintBoundary(child: _newImagesSection()),
 
@@ -1399,7 +1415,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                       _rulesSection(),
                       _preferencesSection(),
 
-                      const SizedBox(height: 24), // altta sabit butonlar var
+                      const SizedBox(height: 24),
                     ]),
                   ),
                 ),

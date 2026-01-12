@@ -33,6 +33,65 @@ class _MyListingsPageState extends State<MyListingsPage> {
     _load();
   }
 
+  // ===========================
+  // ✅ STATUS HELPERS (admin onaylı akış)
+  // ===========================
+
+  String _normStatus(String s) => s.toLowerCase().trim();
+
+  bool _isStatus(String status, String expected) =>
+      _normStatus(status) == expected;
+
+  bool _isRemovedStatus(String status) => _isStatus(status, 'paused');
+
+  bool _isPublished(String status) => _isStatus(status, 'published');
+
+  bool _isPending(String status) => _isStatus(status, 'pending');
+
+  bool _isDraft(String status) => _isStatus(status, 'draft');
+
+  bool _isRejected(String status) => _isStatus(status, 'rejected');
+
+  // ✅ "Tekrar Yayınla" (aslında: tekrar onaya gönder)
+  bool _canSendToApproval(String status) {
+    final s = _normStatus(status);
+    return s == 'paused' || s == 'rejected' || s == 'draft';
+  }
+
+  String _statusLabel(String s) {
+    final v = _normStatus(s);
+    if (v == 'published') return 'Yayında';
+    if (v == 'pending') return 'Onayda';
+    if (v == 'rejected') return 'Reddedildi';
+    if (v == 'draft') return 'Taslak';
+    if (v == 'paused') return 'Kaldırıldı';
+    return s.isEmpty ? '-' : s;
+  }
+
+  Color _statusBg(String s) {
+    final v = _normStatus(s);
+    if (v == 'published') return Colors.green.shade50;
+    if (v == 'pending') return Colors.orange.shade50;
+    if (v == 'rejected') return Colors.red.shade50;
+    if (v == 'draft') return Colors.blueGrey.shade50;
+    if (v == 'paused') return Colors.red.shade50;
+    return Colors.blue.shade50;
+  }
+
+  Color _statusFg(String s) {
+    final v = _normStatus(s);
+    if (v == 'published') return Colors.green.shade800;
+    if (v == 'pending') return Colors.orange.shade800;
+    if (v == 'rejected') return Colors.red.shade800;
+    if (v == 'draft') return Colors.blueGrey.shade800;
+    if (v == 'paused') return Colors.red.shade800;
+    return Colors.blue.shade800;
+  }
+
+  // ===========================
+  // LOAD
+  // ===========================
+
   Future<void> _load() async {
     if (mounted) {
       setState(() {
@@ -44,9 +103,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
     try {
       final res = await _service.fetchMyListings(limit: 200);
 
-      // ✅ DEĞİŞİKLİK:
-      // "İlanlarım" sayfasında KALDIRILAN (paused) ilanlar DA görünsün.
-      // (artık filtrelemiyoruz)
+      // ✅ "İlanlarım" sayfasında: pending/draft/rejected/paused/published hepsi görünsün
       _items = List<Map<String, dynamic>>.from(res);
 
       // ✅ first image signed url cache
@@ -75,14 +132,18 @@ class _MyListingsPageState extends State<MyListingsPage> {
     if (changed == true) await _load();
   }
 
-  Future<void> _republish(String listingId) async {
+  // ✅ Tekrar yayınla -> admin onaya gönder (pending)
+  Future<void> _republishToPending(String listingId) async {
     try {
+      // Not: Senin service fonksiyonun republishListing ise, onu pending’e çekecek şekilde ayarlı olmalı.
+      // Biz UI tarafında bu butonu "Onaya Gönder" mantığında kullanıyoruz.
       await _service.republishListing(listingId);
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Tekrar yayınlandı ✅')));
+      ).showSnackBar(const SnackBar(content: Text('Onaya gönderildi ✅')));
 
       await _load();
     } catch (e) {
@@ -94,16 +155,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
   }
 
   // ✅ İLANI KALDIR (Service: status = paused)
-  bool _isRemovedStatus(String status) {
-    final s = status.toLowerCase().trim();
-    return s == 'paused';
-  }
-
-  bool _isPublished(String status) {
-    final s = status.toLowerCase().trim();
-    return s == 'published';
-  }
-
   Future<void> _removeListing(Map<String, dynamic> listing) async {
     final id = (listing['id'] ?? '').toString();
     if (id.isEmpty) return;
@@ -130,7 +181,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
     final ok = await _confirm(
       title: 'İlan kaldırılsın mı?',
       message:
-          'Bu ilan artık listelerde görünmez.\n\nDaha sonra istersen "Tekrar Yayınla" ile yeniden yayına alabilirsin.',
+          'Bu ilan artık listelerde görünmez.\n\nDaha sonra istersen "Onaya Gönder" ile yeniden yayına girebilir (admin onayı sonrası) veya tekrar düzenleyebilirsin.',
       confirmText: 'Kaldır',
       danger: true,
     );
@@ -139,7 +190,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
     setState(() => _removeLoadingById[id] = true);
 
     try {
-      // ✅ Service: status=paused
       await _service.removeListing(listingId: id);
 
       if (!mounted) return;
@@ -186,27 +236,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
         ],
       ),
     );
-  }
-
-  String _statusLabel(String s) {
-    final v = s.toLowerCase().trim();
-    if (v == 'published') return 'Yayında';
-    if (v == 'paused') return 'Kaldırıldı';
-    return s;
-  }
-
-  Color _statusBg(String s) {
-    final v = s.toLowerCase().trim();
-    if (v == 'published') return Colors.green.shade50;
-    if (v == 'paused') return Colors.red.shade50;
-    return Colors.blue.shade50;
-  }
-
-  Color _statusFg(String s) {
-    final v = s.toLowerCase().trim();
-    if (v == 'published') return Colors.green.shade800;
-    if (v == 'paused') return Colors.red.shade800;
-    return Colors.blue.shade800;
   }
 
   ListingType _parseType(dynamic v) {
@@ -349,9 +378,27 @@ class _MyListingsPageState extends State<MyListingsPage> {
                     if (district.isNotEmpty) district,
                   ].join(' / ');
 
-                  final removed = _isRemovedStatus(status); // paused
+                  final removed = _isRemovedStatus(status);
                   final published = _isPublished(status);
+                  final pending = _isPending(status);
+                  final rejected = _isRejected(status);
+                  final draft = _isDraft(status);
+
+                  final canSend = _canSendToApproval(status);
                   final removing = _removeLoadingById[id] == true;
+
+                  // Buton etiketi
+                  final republishLabel = removed
+                      ? 'Onaya Gönder'
+                      : rejected
+                      ? 'Tekrar Gönder'
+                      : draft
+                      ? 'Onaya Gönder'
+                      : pending
+                      ? 'Onayda'
+                      : published
+                      ? 'Yayında'
+                      : 'Onaya Gönder';
 
                   return Card(
                     child: Padding(
@@ -459,7 +506,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
                           ),
                           const SizedBox(height: 12),
 
-                          // ✅ Düzenle / Tekrar Yayınla
+                          // ✅ Düzenle / Onaya Gönder
                           Row(
                             children: [
                               Expanded(
@@ -476,13 +523,12 @@ class _MyListingsPageState extends State<MyListingsPage> {
                                     backgroundColor: kTurkuaz,
                                     foregroundColor: Colors.white,
                                   ),
-                                  // ✅ DEĞİŞİKLİK:
-                                  // "Tekrar Yayınla" sadece kaldırılmış (paused) iken aktif olsun.
-                                  onPressed: removed
-                                      ? () => _republish(id)
+                                  // ✅ pending/published iken kapalı
+                                  onPressed: canSend
+                                      ? () => _republishToPending(id)
                                       : null,
                                   icon: const Icon(Icons.publish_outlined),
-                                  label: const Text('Tekrar Yayınla'),
+                                  label: Text(republishLabel),
                                 ),
                               ),
                             ],
