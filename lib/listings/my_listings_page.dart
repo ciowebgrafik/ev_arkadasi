@@ -280,6 +280,9 @@ class _MyListingsPageState extends State<MyListingsPage> {
   // ===========================
   // ✅ BOOST ROZET
   // ===========================
+  // ===========================
+  // ⭐ BOOST STAR BADGE (ICON)
+  // ===========================
 
   Map<String, dynamic> _detailsOf(Map<String, dynamic> item) {
     final d = item['details'];
@@ -301,65 +304,44 @@ class _MyListingsPageState extends State<MyListingsPage> {
     }
   }
 
-  String _boostLabel(Map<String, dynamic> item) {
+  Color _boostStarColor(Map<String, dynamic> item) {
     final details = _detailsOf(item);
     final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
 
-    if (plan == 'gold') return 'ALTIN';
-    if (plan == 'featured') return 'ÖNE ÇIKAR';
-    if (plan == 'urgent') return 'ACİL';
-    return '';
-  }
-
-  Color _boostColor(String label) {
-    switch (label) {
-      case 'ALTIN':
-        return const Color(0xFFFFC107);
-      case 'ÖNE ÇIKAR':
-        return const Color(0xFF00B8D4);
-      case 'ACİL':
-        return const Color(0xFFE53935);
+    switch (plan) {
+      case 'gold':
+        return const Color(0xFFFFC107); // sarı
+      case 'featured':
+        return const Color(0xFF00B8D4); // mavi
+      case 'urgent':
+        return Colors.grey; // gri
       default:
-        return const Color(0xFF00B8D4);
+        return Colors.transparent;
     }
-  }
-
-  Color _boostTextColor(String label) {
-    if (label == 'ACİL') return Colors.white;
-    return Colors.black;
   }
 
   Widget _boostBadge(Map<String, dynamic> item) {
     if (!_isBoostActive(item)) return const SizedBox.shrink();
 
-    final label = _boostLabel(item);
-    if (label.isEmpty) return const SizedBox.shrink();
-
-    final bg = _boostColor(label);
-    final fg = _boostTextColor(label);
+    final color = _boostStarColor(item);
+    if (color == Colors.transparent) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      width: 26,
+      height: 26,
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
+        color: Colors.white.withOpacity(0.90),
+        shape: BoxShape.circle,
         boxShadow: const [
           BoxShadow(
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            blurRadius: 6,
+            offset: Offset(0, 3),
             color: Color(0x33000000),
           ),
         ],
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: fg,
-          fontWeight: FontWeight.w900,
-          fontSize: 11,
-          letterSpacing: 0.3,
-        ),
-      ),
+      alignment: Alignment.center,
+      child: Icon(Icons.star_rounded, size: 18, color: color),
     );
   }
 
