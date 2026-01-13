@@ -277,7 +277,6 @@ class _ListingListPageState extends State<ListingListPage> {
   }
 
   // ---------------------- BOOST BADGE HELPERS ----------------------
-
   Map<String, dynamic> _detailsOf(Map<String, dynamic> item) {
     final d = item['details'];
     if (d is Map<String, dynamic>) return d;
@@ -298,81 +297,60 @@ class _ListingListPageState extends State<ListingListPage> {
     }
   }
 
+  /// ✅ SIRALAMA ÖNCELİĞİ
+  /// ALTIN (3) > ÖNE ÇIKAR (2) > ACİL (1) > NORMAL (0)
   int _boostRank(Map<String, dynamic> item) {
     if (!_isBoostActive(item)) return 0;
+
     final details = _detailsOf(item);
     final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
+
     switch (plan) {
       case 'gold':
         return 3;
-      case 'silver':
+      case 'featured':
         return 2;
-      case 'bronze':
+      case 'urgent':
         return 1;
     }
-    // eski fallback: boosted true ise brnz say
-    return details['boosted'] == true ? 1 : 0;
+    return 0;
   }
 
-  String _boostLabel(Map<String, dynamic> item) {
+  // ✅ rozet rengi (yıldız)
+  Color? _boostStarColor(Map<String, dynamic> item) {
+    if (!_isBoostActive(item)) return null;
+
     final details = _detailsOf(item);
     final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
 
-    switch (plan) {
-      case 'bronze':
-        return 'BRONZ';
-      case 'silver':
-        return 'GÜMÜŞ';
-      case 'gold':
-        return 'ALTIN';
-    }
-
-    final boosted = details['boosted'] == true;
-    return boosted ? 'BRONZ' : '';
+    if (plan == 'gold') return const Color(0xFFFFC107); // ALTIN sarı
+    if (plan == 'featured') return const Color(0xFF00B8D4); // ÖNE ÇIKAR mavi
+    if (plan == 'urgent') return Colors.grey; // ACİL gri
+    return null;
   }
 
-  Color _boostColor(String label) {
-    switch (label) {
-      case 'ALTIN':
-        return const Color(0xFFFFC107);
-      case 'GÜMÜŞ':
-        return const Color(0xFFB0BEC5);
-      case 'BRONZ':
-        return const Color(0xFFB87333);
-      default:
-        return kTurkuaz;
-    }
-  }
-
-  Widget _boostBadge(Map<String, dynamic> item) {
-    if (!_isBoostActive(item)) return const SizedBox.shrink();
-
-    final label = _boostLabel(item);
-    if (label.isEmpty) return const SizedBox.shrink();
-
-    final bg = _boostColor(label);
+  // ✅ küçük yıldız rozet widget'ı
+  Widget _boostStarBadge(Map<String, dynamic> item) {
+    final color = _boostStarColor(item);
+    if (color == null) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: bg,
+        color: Colors.white.withOpacity(0.92),
         borderRadius: BorderRadius.circular(999),
         boxShadow: const [
           BoxShadow(
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            blurRadius: 6,
+            offset: Offset(0, 2),
             color: Color(0x33000000),
           ),
         ],
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.black,
-          fontWeight: FontWeight.w900,
-          fontSize: 11,
-          letterSpacing: 0.4,
-        ),
+      child: Icon(
+        Icons.star_rounded,
+        size: 16, // ✅ küçük yıldız
+        color: color,
       ),
     );
   }
@@ -557,7 +535,7 @@ class _ListingListPageState extends State<ListingListPage> {
       return cb.compareTo(ca); // yeni -> eski
     }
 
-    // ✅ 1) önce boostRank
+    // ✅ 1) önce boost önceliği
     int boostCmp(Map<String, dynamic> a, Map<String, dynamic> b) {
       final ra = _boostRank(a);
       final rb = _boostRank(b);
@@ -1549,30 +1527,7 @@ class _ListingListPageState extends State<ListingListPage> {
                                 },
                               ),
                       ),
-                      Positioned(left: 6, top: 6, child: _boostBadge(it)),
-                      if (urgent)
-                        Positioned(
-                          right: 6,
-                          top: 6,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              'ACİL',
-                              style: TextStyle(
-                                color: Colors.red.shade700,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ),
+                      Positioned(left: 6, top: 6, child: _boostStarBadge(it)),
                     ],
                   ),
                 ),

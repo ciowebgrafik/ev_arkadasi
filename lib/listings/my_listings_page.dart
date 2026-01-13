@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'doping_page.dart'; // ✅ Doping ekranı
 import 'listing_create_page.dart';
 import 'listing_enums.dart';
 import 'listings_service.dart';
@@ -27,6 +28,9 @@ class _MyListingsPageState extends State<MyListingsPage> {
   // ✅ kaldırma loading: listingId -> bool
   final Map<String, bool> _removeLoadingById = {};
 
+  // ✅ öne çıkar loading: listingId -> bool
+  final Map<String, bool> _featureLoadingById = {};
+
   @override
   void initState() {
     super.initState();
@@ -34,7 +38,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
   }
 
   // ===========================
-  // ✅ STATUS HELPERS (admin onaylı akış)
+  // ✅ STATUS HELPERS
   // ===========================
 
   String _normStatus(String s) => s.toLowerCase().trim();
@@ -52,7 +56,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
   bool _isRejected(String status) => _isStatus(status, 'rejected');
 
-  // ✅ "Tekrar Yayınla" (aslında: tekrar onaya gönder)
   bool _canSendToApproval(String status) {
     final s = _normStatus(status);
     return s == 'paused' || s == 'rejected' || s == 'draft';
@@ -102,11 +105,8 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
     try {
       final res = await _service.fetchMyListings(limit: 200);
-
-      // ✅ "İlanlarım" sayfasında: pending/draft/rejected/paused/published hepsi görünsün
       _items = List<Map<String, dynamic>>.from(res);
 
-      // ✅ first image signed url cache
       _firstImageUrlCache.clear();
       for (final l in _items) {
         final id = (l['id'] ?? '').toString();
@@ -132,11 +132,12 @@ class _MyListingsPageState extends State<MyListingsPage> {
     if (changed == true) await _load();
   }
 
-  // ✅ Tekrar yayınla -> admin onaya gönder (pending)
+  // ===========================
+  // ✅ ONAYA GÖNDER
+  // ===========================
+
   Future<void> _republishToPending(String listingId) async {
     try {
-      // Not: Senin service fonksiyonun republishListing ise, onu pending’e çekecek şekilde ayarlı olmalı.
-      // Biz UI tarafında bu butonu "Onaya Gönder" mantığında kullanıyoruz.
       await _service.republishListing(listingId);
 
       if (!mounted) return;
@@ -154,7 +155,41 @@ class _MyListingsPageState extends State<MyListingsPage> {
     }
   }
 
-  // ✅ İLANI KALDIR (Service: status = paused)
+  // ===========================
+  // ✅ İLANI ÖNE ÇIKAR → DOPING PAGE
+  // ===========================
+  Future<void> _featureListing(Map<String, dynamic> listing) async {
+    final id = (listing['id'] ?? '').toString();
+    if (id.isEmpty) return;
+
+    final status = (listing['status'] ?? '').toString();
+    if (!_isPublished(status)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('İlanı öne çıkarmak için ilan yayında olmalı.'),
+        ),
+      );
+      return;
+    }
+
+    final changed = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DopingPage(
+          listingId: id,
+          title: (listing['title'] ?? '').toString(),
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    if (changed == true) await _load();
+  }
+
+  // ===========================
+  // ✅ İLANI KALDIR
+  // ===========================
+
   Future<void> _removeListing(Map<String, dynamic> listing) async {
     final id = (listing['id'] ?? '').toString();
     if (id.isEmpty) return;
@@ -168,7 +203,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
       return;
     }
 
-    // ✅ sadece yayında olan kaldırılabilsin
     if (!_isPublished(status)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sadece yayındaki ilan kaldırılabilir.')),
@@ -181,7 +215,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
     final ok = await _confirm(
       title: 'İlan kaldırılsın mı?',
       message:
-          'Bu ilan artık listelerde görünmez.\n\nDaha sonra istersen "Onaya Gönder" ile yeniden yayına girebilir (admin onayı sonrası) veya tekrar düzenleyebilirsin.',
+          'Bu ilan artık listelerde görünmez.\n\nDaha sonra istersen tekrar onaya gönderebilirsin.',
       confirmText: 'Kaldır',
       danger: true,
     );
@@ -243,9 +277,9 @@ class _MyListingsPageState extends State<MyListingsPage> {
     return listingTypeFromDb(s);
   }
 
-  // ======================================================
-  // ✅ DOPING HELPERS (boost_end aktifse rozet)
-  // ======================================================
+  // ===========================
+  // ✅ BOOST ROZET
+  // ===========================
 
   Map<String, dynamic> _detailsOf(Map<String, dynamic> item) {
     final d = item['details'];
@@ -271,30 +305,28 @@ class _MyListingsPageState extends State<MyListingsPage> {
     final details = _detailsOf(item);
     final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
 
-    switch (plan) {
-      case 'bronze':
-        return 'BRONZ';
-      case 'silver':
-        return 'GÜMÜŞ';
-      case 'gold':
-        return 'ALTIN';
-    }
-
-    final boosted = details['boosted'] == true;
-    return boosted ? 'BRONZ' : '';
+    if (plan == 'gold') return 'ALTIN';
+    if (plan == 'featured') return 'ÖNE ÇIKAR';
+    if (plan == 'urgent') return 'ACİL';
+    return '';
   }
 
   Color _boostColor(String label) {
     switch (label) {
       case 'ALTIN':
         return const Color(0xFFFFC107);
-      case 'GÜMÜŞ':
-        return const Color(0xFFB0BEC5);
-      case 'BRONZ':
-        return const Color(0xFFB87333);
+      case 'ÖNE ÇIKAR':
+        return const Color(0xFF00B8D4);
+      case 'ACİL':
+        return const Color(0xFFE53935);
       default:
         return const Color(0xFF00B8D4);
     }
+  }
+
+  Color _boostTextColor(String label) {
+    if (label == 'ACİL') return Colors.white;
+    return Colors.black;
   }
 
   Widget _boostBadge(Map<String, dynamic> item) {
@@ -304,6 +336,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
     if (label.isEmpty) return const SizedBox.shrink();
 
     final bg = _boostColor(label);
+    final fg = _boostTextColor(label);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -320,19 +353,19 @@ class _MyListingsPageState extends State<MyListingsPage> {
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          color: Colors.black,
+        style: TextStyle(
+          color: fg,
           fontWeight: FontWeight.w900,
           fontSize: 11,
-          letterSpacing: 0.5,
+          letterSpacing: 0.3,
         ),
       ),
     );
   }
 
-  // ======================================================
+  // ===========================
   // UI
-  // ======================================================
+  // ===========================
 
   @override
   Widget build(BuildContext context) {
@@ -342,11 +375,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
         foregroundColor: Colors.white,
         title: const Text('İlanlarım'),
         actions: [
-          IconButton(
-            onPressed: _load,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Yenile',
-          ),
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
       ),
       body: _loading
@@ -360,8 +389,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
               child: ListView.separated(
                 padding: const EdgeInsets.all(12),
                 itemCount: _items.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 10),
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (context, i) {
                   final l = _items[i];
                   final id = (l['id'] ?? '').toString();
@@ -380,21 +408,18 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
                   final removed = _isRemovedStatus(status);
                   final published = _isPublished(status);
-                  final pending = _isPending(status);
-                  final rejected = _isRejected(status);
-                  final draft = _isDraft(status);
-
                   final canSend = _canSendToApproval(status);
-                  final removing = _removeLoadingById[id] == true;
 
-                  // Buton etiketi
+                  final removing = _removeLoadingById[id] == true;
+                  final featuring = _featureLoadingById[id] == true;
+
                   final republishLabel = removed
                       ? 'Onaya Gönder'
-                      : rejected
+                      : _isRejected(status)
                       ? 'Tekrar Gönder'
-                      : draft
+                      : _isDraft(status)
                       ? 'Onaya Gönder'
-                      : pending
+                      : _isPending(status)
                       ? 'Onayda'
                       : published
                       ? 'Yayında'
@@ -422,21 +447,10 @@ class _MyListingsPageState extends State<MyListingsPage> {
                                               ? Image.network(
                                                   url,
                                                   fit: BoxFit.cover,
-                                                  errorBuilder:
-                                                      (context, error, stack) {
-                                                        return const Center(
-                                                          child: Icon(
-                                                            Icons
-                                                                .broken_image_outlined,
-                                                            color: Colors.grey,
-                                                          ),
-                                                        );
-                                                      },
                                                 )
                                               : const Center(
                                                   child: Icon(
                                                     Icons.image_outlined,
-                                                    color: Colors.grey,
                                                   ),
                                                 ),
                                         ),
@@ -491,14 +505,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'ID: $id',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black45,
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -506,7 +512,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
                           ),
                           const SizedBox(height: 12),
 
-                          // ✅ Düzenle / Onaya Gönder
                           Row(
                             children: [
                               Expanded(
@@ -523,7 +528,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
                                     backgroundColor: kTurkuaz,
                                     foregroundColor: Colors.white,
                                   ),
-                                  // ✅ pending/published iken kapalı
                                   onPressed: canSend
                                       ? () => _republishToPending(id)
                                       : null,
@@ -536,7 +540,34 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
                           const SizedBox(height: 10),
 
-                          // ✅ İlanı Kaldır (sadece published iken aktif)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 46,
+                            child: OutlinedButton.icon(
+                              onPressed: (!published || removed || featuring)
+                                  ? null
+                                  : () => _featureListing(l),
+                              icon: featuring
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.trending_up),
+                              label: const Text('İlanı Öne Çıkar'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: kTurkuaz,
+                                side: BorderSide(
+                                  color: kTurkuaz.withOpacity(0.35),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 10),
+
                           SizedBox(
                             width: double.infinity,
                             height: 46,

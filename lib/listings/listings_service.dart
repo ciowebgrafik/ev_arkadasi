@@ -7,6 +7,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'listing_enums.dart';
 
+// ✅ Doping tipleri
+enum DopingType { gold, urgent, featured }
+
 class ListingsService {
   final SupabaseClient _db = Supabase.instance.client;
 
@@ -170,6 +173,101 @@ class ListingsService {
 
     payload['updated_at'] = DateTime.now().toIso8601String();
     await _db.from('listings').update(payload).eq('id', listingId);
+  }
+
+  // ===================== ✅ DOİNG / DOPİNG UYGULA (kolonlarla) =====================
+  /// Gold: 30 gün
+  /// Urgent: 15 gün
+  /// Featured: 7 gün
+  Future<void> applyDoping({
+    required String listingId,
+    required DopingType type,
+  }) async {
+    final user = _db.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    final nowUtc = DateTime.now().toUtc();
+    Map<String, dynamic> data = {};
+
+    if (type == DopingType.gold) {
+      data = {
+        'is_gold': true,
+        'gold_until': nowUtc.add(const Duration(days: 30)).toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+    } else if (type == DopingType.urgent) {
+      data = {
+        'is_urgent': true,
+        'urgent_until': nowUtc.add(const Duration(days: 15)).toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+    } else if (type == DopingType.featured) {
+      data = {
+        'is_featured': true,
+        'featured_until': nowUtc.add(const Duration(days: 7)).toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+    }
+
+    await _db
+        .from('listings')
+        .update(data)
+        .eq('id', listingId)
+        .eq('owner_id', user.id);
+  }
+
+  // ===================== ✅ APPLY BOOST (details json içine yazar) =====================
+  /// MyListingsPage'deki rozet kodun boost_plan + boost_end üzerinden çalışıyor.
+  /// Bu fonksiyon mevcut details'ı ezmeden merge eder.
+  ///
+  /// plan örnekleri:
+  /// - "featured" / "gold" / "urgent"  (senin badge switch'ine uygun)
+  /// - istersen "featured_7" gibi de yazarsın ama badge kodunda plan eşleşmesini ona göre değiştirmen gerekir.
+  Future<void> applyBoost({
+    required String listingId,
+    required String plan, // featured | gold | urgent | bronze | silver
+    required int days,
+    required int priceTry,
+  }) async {
+    final user = _db.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    final now = DateTime.now();
+    final end = now.add(Duration(days: days));
+
+    // ✅ mevcut details + owner kontrol
+    final cur = await _db
+        .from('listings')
+        .select('details, owner_id')
+        .eq('id', listingId)
+        .maybeSingle();
+
+    if (cur == null) throw Exception('İlan bulunamadı.');
+    if ((cur['owner_id'] ?? '').toString() != user.id) {
+      throw Exception('Bu ilan sana ait değil.');
+    }
+
+    final existing = cur['details'];
+    Map<String, dynamic> details = {};
+    if (existing is Map<String, dynamic>)
+      details = Map<String, dynamic>.from(existing);
+    if (existing is Map) details = existing.map((k, v) => MapEntry('$k', v));
+
+    details['boost_plan'] = plan; // ✅ MyListingsPage bunu okuyor
+    details['boost_start'] = now.toIso8601String();
+    details['boost_end'] = end.toIso8601String();
+    details['boost_days'] = days;
+    details['boost_price'] = priceTry;
+    details['boosted'] = true;
+
+    await _db
+        .from('listings')
+        .update({
+          'details': details,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', listingId)
+        .eq('owner_id', user.id);
   }
 
   // ===================== ✅ İLANI KALDIR (soft remove) =====================
@@ -337,8 +435,6 @@ class ListingsService {
 
   // ===================== Select =====================
 
-  /// ✅ Public liste: default published (senin ListingListPage zaten published çekiyor)
-  /// status boş verilirse bile paused/draft/closed/sold/deleted gösterme.
   Future<List<Map<String, dynamic>>> fetchListings({
     ListingType? type,
     PricePeriod? pricePeriod,
@@ -364,8 +460,8 @@ class ListingsService {
           .neq('status', 'closed')
           .neq('status', 'sold')
           .neq('status', 'draft')
-          .neq('status', 'pending') // ✅ onayda olan public listede görünmesin
-          .neq('status', 'rejected'); // ✅ reddedilen de görünmesin
+          .neq('status', 'pending')
+          .neq('status', 'rejected');
     }
 
     if (type != null) q = q.eq('type', listingTypeToDb(type));
@@ -416,7 +512,6 @@ class ListingsService {
     final user = _db.auth.currentUser;
     if (user == null) throw Exception('Giriş yapılmamış.');
 
-    // (opsiyonel) zaten pending ise güncelleme yapmayalım
     try {
       final cur = await _db
           .from('listings')
@@ -427,9 +522,7 @@ class ListingsService {
 
       final st = (cur?['status'] ?? '').toString().toLowerCase().trim();
       if (st == 'pending') return;
-    } catch (_) {
-      // ignore, yine de update deneriz
-    }
+    } catch (_) {}
 
     await _db
         .from('listings')
