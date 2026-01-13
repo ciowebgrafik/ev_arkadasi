@@ -38,6 +38,9 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   // first photo cache
   final Map<String, String?> _firstImageUrlCache = {};
 
+  // ✅ archive button loading
+  bool _archiveLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -205,9 +208,63 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   Map<String, dynamic> _detailsOf(Map<String, dynamic> item) {
     final d = item['details'];
     if (d is Map<String, dynamic>) return Map<String, dynamic>.from(d);
-    if (d is Map)
+    if (d is Map) {
       return Map<String, dynamic>.from(d.map((k, v) => MapEntry('$k', v)));
+    }
     return {};
+  }
+
+  DateTime? _parseDt(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    return DateTime.tryParse(s);
+  }
+
+  bool _isExpired(Map<String, dynamic> it) {
+    final exp = _parseDt(it['expires_at']);
+    if (exp == null) return false; // eski kayıtlar null olabilir
+    return exp.isBefore(DateTime.now());
+  }
+
+  String _fmtDateShort(DateTime dt) {
+    String two(int x) => x < 10 ? '0$x' : '$x';
+    return '${two(dt.day)}.${two(dt.month)}.${dt.year}';
+  }
+
+  // ===================== ✅ ARCHIVE 7+ DAYS RPC =====================
+  Future<void> _archiveOldReviewed() async {
+    if (!_isAdmin) return;
+    if (_archiveLoading) return;
+
+    final ok = await _confirm(
+      title: '7 günü geçenleri arşivle?',
+      message:
+          'Onaylanan veya reddedilen ve 7 günü geçen ilanlar admin panelinden kaldırılıp arşivlenecek.',
+      confirmText: 'Arşivle',
+      danger: true,
+    );
+    if (ok != true) return;
+
+    setState(() => _archiveLoading = true);
+
+    try {
+      final res = await _sb.rpc('archive_old_admin_reviewed_listings');
+
+      int count = 0;
+      if (res is int) count = res;
+      if (res is num) count = res.toInt();
+
+      if (!mounted) return;
+      _snack('$count ilan arşivlendi ✅');
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Arşivleme hatası: $e');
+    } finally {
+      if (mounted) setState(() => _archiveLoading = false);
+    }
   }
 
   // ===================== ADMIN ACTIONS =====================
@@ -216,7 +273,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
 
     final ok = await _confirm(
       title: 'Onayla?',
-      message: 'Bu ilan yayına alınacak (published).',
+      message: 'Bu ilan yayına alınacak (published) ve 30 gün aktif kalacak.',
       confirmText: 'Onayla',
     );
     if (ok != true) return;
@@ -224,16 +281,32 @@ class _AdminPanelPageState extends State<AdminPanelPage>
     setState(() => _actionLoading[id] = true);
 
     try {
+      final now = DateTime.now();
+      final expires = now.add(const Duration(days: 30));
+
       await _sb
           .from('listings')
           .update({
             'status': 'published',
-            'updated_at': DateTime.now().toIso8601String(),
+            'updated_at': now.toIso8601String(),
+
+            // ✅ 30 gün kuralı
+            'published_at': now.toIso8601String(),
+            'expires_at': expires.toIso8601String(),
+
+            // ✅ admin review fields
+            'admin_reviewed_at': now.toIso8601String(),
+            'admin_archived': false,
+            'admin_archived_at': null,
+
+            // ✅ doping reset (istersen)
+            'boost_type': 'none',
+            'boost_until': null,
           })
           .eq('id', id);
 
       if (!mounted) return;
-      _snack('Onaylandı ✅');
+      _snack('Onaylandı ✅ (30 gün aktif)');
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -291,6 +364,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
     setState(() => _actionLoading[id] = true);
 
     try {
+      final now = DateTime.now();
       final reason = reasonCtrl.text.trim();
 
       // ✅ details MERGE (ezme yok)
@@ -298,7 +372,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       final newDetails = <String, dynamic>{
         ...oldDetails,
         if (reason.isNotEmpty) 'admin_note': reason,
-        'rejected_at': DateTime.now().toIso8601String(),
+        'rejected_at': now.toIso8601String(),
       };
 
       await _sb
@@ -306,7 +380,12 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           .update({
             'status': 'rejected',
             'details': newDetails,
-            'updated_at': DateTime.now().toIso8601String(),
+            'updated_at': now.toIso8601String(),
+
+            // ✅ admin review fields
+            'admin_reviewed_at': now.toIso8601String(),
+            'admin_archived': false,
+            'admin_archived_at': null,
           })
           .eq('id', id);
 
@@ -334,11 +413,26 @@ class _AdminPanelPageState extends State<AdminPanelPage>
     setState(() => _actionLoading[id] = true);
 
     try {
+      final now = DateTime.now();
+
       await _sb
           .from('listings')
           .update({
             'status': 'pending',
-            'updated_at': DateTime.now().toIso8601String(),
+            'updated_at': now.toIso8601String(),
+
+            // ✅ review reset
+            'admin_reviewed_at': null,
+            'admin_archived': false,
+            'admin_archived_at': null,
+
+            // ✅ 30 gün alanlarını sıfırla
+            'published_at': null,
+            'expires_at': null,
+
+            // ✅ doping reset
+            'boost_type': 'none',
+            'boost_until': null,
           })
           .eq('id', id);
 
@@ -397,6 +491,9 @@ class _AdminPanelPageState extends State<AdminPanelPage>
     final isPublished = status == 'published';
 
     final acting = _isLoadingId(id);
+
+    final exp = _parseDt(it['expires_at']);
+    final expired = isPublished && _isExpired(it);
 
     Color statusBg() {
       if (isPending) return Colors.amber.shade50;
@@ -497,6 +594,29 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                               ),
                             ),
                           ),
+
+                          // ✅ expires info on published
+                          if (isPublished && exp != null)
+                            _chip('Bitiş: ${_fmtDateShort(exp.toLocal())}'),
+                          if (expired)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: const Text(
+                                'SÜRESİ DOLDU',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -669,6 +789,22 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: '7 günü geçenleri arşivle',
+            onPressed: (!_isAdmin || _archiveLoading)
+                ? null
+                : _archiveOldReviewed,
+            icon: _archiveLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.inventory_2_outlined),
+          ),
           IconButton(
             tooltip: 'Yenile',
             onPressed: _isAdmin ? _load : null,

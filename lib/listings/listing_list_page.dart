@@ -1,3 +1,7 @@
+// ==========================
+// ✅ listing_list_page.dart
+// ✅ PART 1 / 2
+// ==========================
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -276,60 +280,46 @@ class _ListingListPageState extends State<ListingListPage> {
     await _loadCities();
   }
 
-  // ---------------------- BOOST BADGE HELPERS ----------------------
-  Map<String, dynamic> _detailsOf(Map<String, dynamic> item) {
-    final d = item['details'];
-    if (d is Map<String, dynamic>) return d;
-    if (d is Map) return d.map((k, v) => MapEntry('$k', v));
-    return {};
+  // ---------------------- ✅ NEW BOOST (DB columns) ----------------------
+  DateTime? _parseDt(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    return DateTime.tryParse(s);
   }
 
   bool _isBoostActive(Map<String, dynamic> item) {
-    final details = _detailsOf(item);
-    final endStr = (details['boost_end'] ?? '').toString().trim();
-    if (endStr.isEmpty) return false;
-
-    try {
-      final end = DateTime.parse(endStr);
-      return end.isAfter(DateTime.now());
-    } catch (_) {
-      return false;
-    }
+    final until = _parseDt(item['boost_until']);
+    if (until == null) return false;
+    return until.isAfter(DateTime.now());
   }
 
   /// ✅ SIRALAMA ÖNCELİĞİ
-  /// ALTIN (3) > ÖNE ÇIKAR (2) > ACİL (1) > NORMAL (0)
+  /// ALTIN (3) > ACİL (2) > ÖNE ÇIKAR (1) > NORMAL (0)
   int _boostRank(Map<String, dynamic> item) {
     if (!_isBoostActive(item)) return 0;
-
-    final details = _detailsOf(item);
-    final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
-
-    switch (plan) {
-      case 'gold':
-        return 3;
-      case 'featured':
-        return 2;
-      case 'urgent':
-        return 1;
-    }
+    final t = (item['boost_type'] ?? 'none').toString().toLowerCase().trim();
+    if (t == 'gold') return 3;
+    if (t == 'urgent') return 2;
+    if (t == 'featured') return 1;
     return 0;
   }
 
-  // ✅ rozet rengi (yıldız)
+  // ✅ DÜZELTİLDİ:
+  // Altın = Sarı ⭐
+  // Acil = Turkuaz ⭐
+  // Öne çıkar = Gri ⭐
   Color? _boostStarColor(Map<String, dynamic> item) {
     if (!_isBoostActive(item)) return null;
 
-    final details = _detailsOf(item);
-    final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
-
-    if (plan == 'gold') return const Color(0xFFFFC107); // ALTIN sarı
-    if (plan == 'featured') return const Color(0xFF00B8D4); // ÖNE ÇIKAR mavi
-    if (plan == 'urgent') return Colors.grey; // ACİL gri
+    final t = (item['boost_type'] ?? 'none').toString().toLowerCase().trim();
+    if (t == 'gold') return const Color(0xFFFFC107); // 🟡 Altın
+    if (t == 'urgent') return const Color(0xFF00B8D4); // 🔵 Acil (turkuaz)
+    if (t == 'featured') return Colors.grey; // ⚪ Öne çıkar (gri)
     return null;
   }
 
-  // ✅ küçük yıldız rozet widget'ı
   Widget _boostStarBadge(Map<String, dynamic> item) {
     final color = _boostStarColor(item);
     if (color == null) return const SizedBox.shrink();
@@ -347,11 +337,7 @@ class _ListingListPageState extends State<ListingListPage> {
           ),
         ],
       ),
-      child: Icon(
-        Icons.star_rounded,
-        size: 16, // ✅ küçük yıldız
-        color: color,
-      ),
+      child: Icon(Icons.star_rounded, size: 16, color: color),
     );
   }
 
@@ -412,7 +398,7 @@ class _ListingListPageState extends State<ListingListPage> {
     return out;
   }
 
-  // ---------------------- ✅ FETCH (title/desc + type search) ----------------------
+  // ---------------------- ✅ FETCH (ACTIVE 30 days + search) ----------------------
   Future<List<Map<String, dynamic>>> _fetchListingsDirect() async {
     final cityTxt = _clean(_cityCtrl.text);
     final distTxt = _clean(_districtCtrl.text);
@@ -420,8 +406,9 @@ class _ListingListPageState extends State<ListingListPage> {
 
     var query = _sb.from('listings').select('*');
 
-    // ✅ SADECE YAYINDAKİLERİ GÖSTER
-    query = query.eq('status', 'published');
+    // ✅ SADECE YAYINDA + AKTİF (30 gün): expires_at > now()
+    final nowIso = DateTime.now().toIso8601String();
+    query = query.eq('status', 'published').gt('expires_at', nowIso);
 
     // ✅ Tür filtresi (seçiliyse)
     if (_type != null) {
@@ -443,21 +430,18 @@ class _ListingListPageState extends State<ListingListPage> {
     if (_selectedCityId != null) {
       query = query.eq('city_id', _selectedCityId!);
     } else if (cityTxt.isNotEmpty) {
-      // ✅ FIX: ilike pattern olmalı
       query = query.ilike('city', '%$cityTxt%');
     }
 
     if (_selectedDistrictId != null) {
       query = query.eq('district_id', _selectedDistrictId!);
     } else if (distTxt.isNotEmpty) {
-      // ✅ FIX: ilike pattern olmalı
       query = query.ilike('district', '%$distTxt%');
     }
 
     // ✅ Arama: başlık/açıklama + (type search)
     if (qTxt.isNotEmpty) {
       final pattern = '%$qTxt%';
-
       final orParts = <String>[
         'title.ilike.$pattern',
         'description.ilike.$pattern',
@@ -474,7 +458,7 @@ class _ListingListPageState extends State<ListingListPage> {
       query = query.or(orParts.join(','));
     }
 
-    // ✅ Sıralama: önce created_at çekelim, sonra localde boost + seçilen sort
+    // ✅ DB'den created_at desc alıp, localde boost + sort uyguluyoruz
     final res = await query.order('created_at', ascending: false);
 
     return (res as List)
@@ -496,12 +480,10 @@ class _ListingListPageState extends State<ListingListPage> {
       final sorted = List<Map<String, dynamic>>.from(items);
 
       // ✅ BOOST ÖNCELİKLİ SIRALAMA:
-      // önce boostRank (gold>silver>bronze>none), sonra seçilen sort
       _applySort(sorted);
 
-      // ✅ cache reset (liste değişince eski resim/url kalmasın)
+      // ✅ cache reset
       _firstImageUrlCache.clear();
-
       setState(() => _items = sorted);
 
       for (final it in sorted) {
@@ -535,11 +517,18 @@ class _ListingListPageState extends State<ListingListPage> {
       return cb.compareTo(ca); // yeni -> eski
     }
 
-    // ✅ 1) önce boost önceliği
+    // ✅ 1) önce boost önceliği (rank) + (aynı rank ise boost_until daha uzun olan üstte)
     int boostCmp(Map<String, dynamic> a, Map<String, dynamic> b) {
       final ra = _boostRank(a);
       final rb = _boostRank(b);
-      if (ra != rb) return rb.compareTo(ra); // büyük rank öne
+      if (ra != rb) return rb.compareTo(ra);
+
+      final au = _parseDt(a['boost_until']);
+      final bu = _parseDt(b['boost_until']);
+      final aMs = au?.millisecondsSinceEpoch ?? 0;
+      final bMs = bu?.millisecondsSinceEpoch ?? 0;
+      if (aMs != bMs) return bMs.compareTo(aMs);
+
       return 0;
     }
 
@@ -924,6 +913,10 @@ class _ListingListPageState extends State<ListingListPage> {
     setState(() => _items = copy);
   }
 
+  // ==========================
+  // ✅ listing_list_page.dart
+  // ✅ PART 2 / 2
+  // ==========================
   // ✅ KAYITLI ARAMALAR: AÇ
   Future<void> _openSavedSearchesSheet() async {
     final user = _sb.auth.currentUser;
@@ -1360,8 +1353,6 @@ class _ListingListPageState extends State<ListingListPage> {
     return loc;
   }
 
-  bool _isUrgent(Map<String, dynamic> it) => it['is_urgent'] == true;
-
   Future<String?> _getFirstImageSignedUrl(Map<String, dynamic> it) async {
     try {
       final paths = _service.extractImagePaths(it);
@@ -1454,7 +1445,6 @@ class _ListingListPageState extends State<ListingListPage> {
     final firstUrl = _firstImageUrlCache[id];
 
     final title = _clean((it['title'] ?? '').toString());
-    final urgent = _isUrgent(it);
 
     final typeLabel = _fmtType(it);
     final priceLabel = _fmtPrice(it);
@@ -1527,7 +1517,10 @@ class _ListingListPageState extends State<ListingListPage> {
                                 },
                               ),
                       ),
+                      // ✅ Doping ⭐ rozet
                       Positioned(left: 6, top: 6, child: _boostStarBadge(it)),
+
+                      // ❌ ACİL yazı etiketi kaldırıldı (stabil UI için)
                     ],
                   ),
                 ),
@@ -1571,6 +1564,16 @@ class _ListingListPageState extends State<ListingListPage> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Stabil görünüm: farklı telefonlarda font ölçeği yüzünden kaymayı engeller
+    final mq = MediaQuery.of(context);
+
+    return MediaQuery(
+      data: mq.copyWith(textScaler: const TextScaler.linear(1.0)),
+      child: _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     const maxW = 560.0;
 
     final dynamicTitle = (_type == null)

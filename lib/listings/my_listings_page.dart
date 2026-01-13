@@ -92,6 +92,32 @@ class _MyListingsPageState extends State<MyListingsPage> {
   }
 
   // ===========================
+  // ✅ expires_at helpers (Sekmeler için)
+  // ===========================
+
+  DateTime? _parseDt(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    return DateTime.tryParse(s);
+  }
+
+  bool _isExpired(Map<String, dynamic> listing) {
+    final exp = _parseDt(listing['expires_at']);
+    if (exp == null) return false; // yoksa expired saymayalım
+    return !exp.isAfter(DateTime.now());
+  }
+
+  /// ✅ Yayında sekmesi kriteri:
+  /// status = published AND expires_at > now
+  bool _isLiveListing(Map<String, dynamic> listing) {
+    final status = (listing['status'] ?? '').toString();
+    if (!_isPublished(status)) return false;
+    return !_isExpired(listing);
+  }
+
+  // ===========================
   // LOAD
   // ===========================
 
@@ -172,6 +198,19 @@ class _MyListingsPageState extends State<MyListingsPage> {
       return;
     }
 
+    // ✅ ekstra: süresi geçmişse de öne çıkarma kapalı
+    if (_isExpired(listing)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu ilan süresi dolmuş. Yeniden onaya gönder.'),
+        ),
+      );
+      return;
+    }
+
+    // (İstersen burada “loading” göstermek için set edebilirsin)
+    // setState(() => _featureLoadingById[id] = true);
+
     final changed = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -183,6 +222,8 @@ class _MyListingsPageState extends State<MyListingsPage> {
     );
 
     if (!mounted) return;
+    // setState(() => _featureLoadingById[id] = false);
+
     if (changed == true) await _load();
   }
 
@@ -278,10 +319,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
   }
 
   // ===========================
-  // ✅ BOOST ROZET
-  // ===========================
-  // ===========================
-  // ⭐ BOOST STAR BADGE (ICON)
+  // ✅ BOOST ROZET (STAR)
   // ===========================
 
   Map<String, dynamic> _detailsOf(Map<String, dynamic> item) {
@@ -304,17 +342,18 @@ class _MyListingsPageState extends State<MyListingsPage> {
     }
   }
 
+  // ✅ DÜZELTİLDİ: Altın=sarı, Acil=turkuaz, Öne çıkar=gri
   Color _boostStarColor(Map<String, dynamic> item) {
     final details = _detailsOf(item);
     final plan = (details['boost_plan'] ?? '').toString().toLowerCase().trim();
 
     switch (plan) {
       case 'gold':
-        return const Color(0xFFFFC107); // sarı
-      case 'featured':
-        return const Color(0xFF00B8D4); // mavi
+        return const Color(0xFFFFC107); // 🟡 Altın
       case 'urgent':
-        return Colors.grey; // gri
+        return const Color(0xFF00B8D4); // 🔵 Acil (turkuaz)
+      case 'featured':
+        return Colors.grey; // ⚪ Öne çıkar (gri)
       default:
         return Colors.transparent;
     }
@@ -346,242 +385,275 @@ class _MyListingsPageState extends State<MyListingsPage> {
   }
 
   // ===========================
+  // ✅ UI - List Builder
+  // ===========================
+
+  Widget _buildList(List<Map<String, dynamic>> list) {
+    if (list.isEmpty) {
+      return const Center(child: Text('Bu sekmede ilan yok.'));
+    }
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(12),
+        itemCount: list.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (context, i) {
+          final l = list[i];
+          final id = (l['id'] ?? '').toString();
+          final title = (l['title'] ?? '').toString().trim();
+          final city = (l['city'] ?? '').toString().trim();
+          final district = (l['district'] ?? '').toString().trim();
+          final status = (l['status'] ?? '').toString().trim();
+
+          final type = _parseType(l['type']);
+          final url = _firstImageUrlCache[id];
+
+          final loc = [
+            if (city.isNotEmpty) city,
+            if (district.isNotEmpty) district,
+          ].join(' / ');
+
+          final removed = _isRemovedStatus(status);
+          final published = _isPublished(status);
+          final canSend = _canSendToApproval(status);
+
+          final removing = _removeLoadingById[id] == true;
+          final featuring = _featureLoadingById[id] == true;
+
+          final republishLabel = removed
+              ? 'Onaya Gönder'
+              : _isRejected(status)
+              ? 'Tekrar Gönder'
+              : _isDraft(status)
+              ? 'Onaya Gönder'
+              : _isPending(status)
+              ? 'Onayda'
+              : published
+              ? 'Yayında'
+              : 'Onaya Gönder';
+
+          // ✅ sekme mantığı: yayında ise expired zaten false
+          final expired = _isExpired(l);
+
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(
+                          width: 72,
+                          height: 72,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: Container(
+                                  color: Colors.grey.shade200,
+                                  child: (url != null && url.isNotEmpty)
+                                      ? Image.network(url, fit: BoxFit.cover)
+                                      : const Center(
+                                          child: Icon(Icons.image_outlined),
+                                        ),
+                                ),
+                              ),
+                              Positioned(
+                                left: 6,
+                                top: 6,
+                                child: _boostBadge(l),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title.isEmpty ? '(Başlıksız)' : title,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _chip(type.label),
+                                if (loc.isNotEmpty) _chip(loc),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _statusBg(status),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    _statusLabel(status),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: _statusFg(status),
+                                    ),
+                                  ),
+                                ),
+                                if (published && expired)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade50,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      'Süresi doldu',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.red.shade800,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _openEdit(l),
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Düzenle'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kTurkuaz,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: canSend
+                              ? () => _republishToPending(id)
+                              : null,
+                          icon: const Icon(Icons.publish_outlined),
+                          label: Text(republishLabel),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: OutlinedButton.icon(
+                      onPressed: (!published || removed || expired || featuring)
+                          ? null
+                          : () => _featureListing(l),
+                      icon: featuring
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.trending_up),
+                      label: const Text('İlanı Öne Çıkar'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kTurkuaz,
+                        side: BorderSide(color: kTurkuaz.withOpacity(0.35)),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: OutlinedButton.icon(
+                      onPressed: (!published || removed || removing)
+                          ? null
+                          : () => _removeListing(l),
+                      icon: removing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.visibility_off_outlined),
+                      label: Text(removed ? 'Kaldırıldı' : 'İlanı Kaldır'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red.shade700,
+                        side: BorderSide(color: Colors.red.shade200),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ===========================
   // UI
   // ===========================
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: kTurkuaz,
-        foregroundColor: Colors.white,
-        title: const Text('İlanlarım'),
-        actions: [
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
-        ],
+    // ✅ Sekme listeleri
+    final live = _items.where(_isLiveListing).toList();
+    final notLive = _items.where((x) => !_isLiveListing(x)).toList();
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: kTurkuaz,
+          foregroundColor: Colors.white,
+          title: const Text('İlanlarım'),
+          actions: [
+            IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          ],
+          bottom: TabBar(
+            indicatorColor: Colors.white,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white.withOpacity(0.85),
+            tabs: [
+              Tab(text: 'Yayında (${live.length})'),
+              Tab(text: 'Yayında Değil (${notLive.length})'),
+            ],
+          ),
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? Center(child: Text('Hata: $_error'))
+            : TabBarView(children: [_buildList(live), _buildList(notLive)]),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(child: Text('Hata: $_error'))
-          : _items.isEmpty
-          ? const Center(child: Text('Henüz ilanın yok.'))
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView.separated(
-                padding: const EdgeInsets.all(12),
-                itemCount: _items.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
-                itemBuilder: (context, i) {
-                  final l = _items[i];
-                  final id = (l['id'] ?? '').toString();
-                  final title = (l['title'] ?? '').toString().trim();
-                  final city = (l['city'] ?? '').toString().trim();
-                  final district = (l['district'] ?? '').toString().trim();
-                  final status = (l['status'] ?? '').toString().trim();
-
-                  final type = _parseType(l['type']);
-                  final url = _firstImageUrlCache[id];
-
-                  final loc = [
-                    if (city.isNotEmpty) city,
-                    if (district.isNotEmpty) district,
-                  ].join(' / ');
-
-                  final removed = _isRemovedStatus(status);
-                  final published = _isPublished(status);
-                  final canSend = _canSendToApproval(status);
-
-                  final removing = _removeLoadingById[id] == true;
-                  final featuring = _featureLoadingById[id] == true;
-
-                  final republishLabel = removed
-                      ? 'Onaya Gönder'
-                      : _isRejected(status)
-                      ? 'Tekrar Gönder'
-                      : _isDraft(status)
-                      ? 'Onaya Gönder'
-                      : _isPending(status)
-                      ? 'Onayda'
-                      : published
-                      ? 'Yayında'
-                      : 'Onaya Gönder';
-
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: SizedBox(
-                                  width: 72,
-                                  height: 72,
-                                  child: Stack(
-                                    children: [
-                                      Positioned.fill(
-                                        child: Container(
-                                          color: Colors.grey.shade200,
-                                          child: (url != null && url.isNotEmpty)
-                                              ? Image.network(
-                                                  url,
-                                                  fit: BoxFit.cover,
-                                                )
-                                              : const Center(
-                                                  child: Icon(
-                                                    Icons.image_outlined,
-                                                  ),
-                                                ),
-                                        ),
-                                      ),
-                                      Positioned(
-                                        left: 6,
-                                        top: 6,
-                                        child: _boostBadge(l),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      title.isEmpty ? '(Başlıksız)' : title,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        _chip(type.label),
-                                        if (loc.isNotEmpty) _chip(loc),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: _statusBg(status),
-                                            borderRadius: BorderRadius.circular(
-                                              999,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            _statusLabel(status),
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                              color: _statusFg(status),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () => _openEdit(l),
-                                  icon: const Icon(Icons.edit_outlined),
-                                  label: const Text('Düzenle'),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: kTurkuaz,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  onPressed: canSend
-                                      ? () => _republishToPending(id)
-                                      : null,
-                                  icon: const Icon(Icons.publish_outlined),
-                                  label: Text(republishLabel),
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 10),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: 46,
-                            child: OutlinedButton.icon(
-                              onPressed: (!published || removed || featuring)
-                                  ? null
-                                  : () => _featureListing(l),
-                              icon: featuring
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.trending_up),
-                              label: const Text('İlanı Öne Çıkar'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: kTurkuaz,
-                                side: BorderSide(
-                                  color: kTurkuaz.withOpacity(0.35),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 10),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: 46,
-                            child: OutlinedButton.icon(
-                              onPressed: (!published || removed || removing)
-                                  ? null
-                                  : () => _removeListing(l),
-                              icon: removing
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.visibility_off_outlined),
-                              label: Text(
-                                removed ? 'Kaldırıldı' : 'İlanı Kaldır',
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.red.shade700,
-                                side: BorderSide(color: Colors.red.shade200),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
     );
   }
 
