@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/widgets/app_ui.dart'; // ✅ STABIL UI
 import 'listing_detail_page.dart';
 import 'listing_enums.dart';
 import 'listings_service.dart';
@@ -306,17 +307,13 @@ class _ListingListPageState extends State<ListingListPage> {
     return 0;
   }
 
-  // ✅ DÜZELTİLDİ:
-  // Altın = Sarı ⭐
-  // Acil = Turkuaz ⭐
-  // Öne çıkar = Gri ⭐
   Color? _boostStarColor(Map<String, dynamic> item) {
     if (!_isBoostActive(item)) return null;
 
     final t = (item['boost_type'] ?? 'none').toString().toLowerCase().trim();
     if (t == 'gold') return const Color(0xFFFFC107); // 🟡 Altın
-    if (t == 'urgent') return const Color(0xFF00B8D4); // 🔵 Acil (turkuaz)
-    if (t == 'featured') return Colors.grey; // ⚪ Öne çıkar (gri)
+    if (t == 'urgent') return const Color(0xFF00B8D4); // 🔵 (turkuaz)
+    if (t == 'featured') return Colors.grey; // ⚪
     return null;
   }
 
@@ -325,10 +322,10 @@ class _ListingListPageState extends State<ListingListPage> {
     if (color == null) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: EdgeInsets.all(AppUI.r(context, 4)),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 999)),
         boxShadow: const [
           BoxShadow(
             blurRadius: 6,
@@ -337,13 +334,12 @@ class _ListingListPageState extends State<ListingListPage> {
           ),
         ],
       ),
-      child: Icon(Icons.star_rounded, size: 16, color: color),
+      child: Icon(Icons.star_rounded, size: AppUI.r(context, 16), color: color),
     );
   }
 
   // ===========================
   // ✅ ARAMA: yazılan metinden "ilan türü" tahmini
-  // (sadece _type seçili değilse devreye girer)
   // ===========================
   Set<ListingType> _inferTypesFromQuery(String raw) {
     final q = raw.toLowerCase().trim();
@@ -353,7 +349,6 @@ class _ListingListPageState extends State<ListingListPage> {
 
     final out = <ListingType>{};
 
-    // job
     if (hasAny([
       'iş',
       'is ilan',
@@ -368,7 +363,6 @@ class _ListingListPageState extends State<ListingListPage> {
       }
     }
 
-    // roommate
     if (hasAny([
       'ev arkadaşı',
       'ev arkadasi',
@@ -381,7 +375,6 @@ class _ListingListPageState extends State<ListingListPage> {
       }
     }
 
-    // item (eşya)
     if (hasAny([
       'eşya',
       'esya',
@@ -398,7 +391,7 @@ class _ListingListPageState extends State<ListingListPage> {
     return out;
   }
 
-  // ---------------------- ✅ FETCH (ACTIVE 30 days + search) ----------------------
+  // ---------------------- ✅ FETCH ----------------------
   Future<List<Map<String, dynamic>>> _fetchListingsDirect() async {
     final cityTxt = _clean(_cityCtrl.text);
     final distTxt = _clean(_districtCtrl.text);
@@ -406,16 +399,14 @@ class _ListingListPageState extends State<ListingListPage> {
 
     var query = _sb.from('listings').select('*');
 
-    // ✅ SADECE YAYINDA + AKTİF (30 gün): expires_at > now()
+    // ✅ SADECE YAYINDA + AKTİF (expires_at > now)
     final nowIso = DateTime.now().toIso8601String();
     query = query.eq('status', 'published').gt('expires_at', nowIso);
 
-    // ✅ Tür filtresi (seçiliyse)
     if (_type != null) {
       query = query.eq('type', listingTypeToDb(_type!));
     }
 
-    // ✅ Periyot / Kategori
     if (_type == ListingType.item) {
       if (_itemCategory != null) {
         query = query.contains('details', {'category': _itemCategory!.db});
@@ -426,7 +417,6 @@ class _ListingListPageState extends State<ListingListPage> {
       }
     }
 
-    // ✅ Konum (id ile filtre)
     if (_selectedCityId != null) {
       query = query.eq('city_id', _selectedCityId!);
     } else if (cityTxt.isNotEmpty) {
@@ -439,7 +429,6 @@ class _ListingListPageState extends State<ListingListPage> {
       query = query.ilike('district', '%$distTxt%');
     }
 
-    // ✅ Arama: başlık/açıklama + (type search)
     if (qTxt.isNotEmpty) {
       final pattern = '%$qTxt%';
       final orParts = <String>[
@@ -447,7 +436,6 @@ class _ListingListPageState extends State<ListingListPage> {
         'description.ilike.$pattern',
       ];
 
-      // ✅ type search sadece tür filtresi seçili değilse
       if (_type == null) {
         final inferred = _inferTypesFromQuery(qTxt);
         for (final t in inferred) {
@@ -458,7 +446,6 @@ class _ListingListPageState extends State<ListingListPage> {
       query = query.or(orParts.join(','));
     }
 
-    // ✅ DB'den created_at desc alıp, localde boost + sort uyguluyoruz
     final res = await query.order('created_at', ascending: false);
 
     return (res as List)
@@ -478,11 +465,8 @@ class _ListingListPageState extends State<ListingListPage> {
       if (!mounted) return;
 
       final sorted = List<Map<String, dynamic>>.from(items);
-
-      // ✅ BOOST ÖNCELİKLİ SIRALAMA:
       _applySort(sorted);
 
-      // ✅ cache reset
       _firstImageUrlCache.clear();
       setState(() => _items = sorted);
 
@@ -514,10 +498,9 @@ class _ListingListPageState extends State<ListingListPage> {
     int createdCmp(Map<String, dynamic> a, Map<String, dynamic> b) {
       final ca = (a['created_at'] ?? '').toString();
       final cb = (b['created_at'] ?? '').toString();
-      return cb.compareTo(ca); // yeni -> eski
+      return cb.compareTo(ca);
     }
 
-    // ✅ 1) önce boost önceliği (rank) + (aynı rank ise boost_until daha uzun olan üstte)
     int boostCmp(Map<String, dynamic> a, Map<String, dynamic> b) {
       final ra = _boostRank(a);
       final rb = _boostRank(b);
@@ -588,7 +571,6 @@ class _ListingListPageState extends State<ListingListPage> {
     String tmpCityName = _cityCtrl.text;
     String tmpDistrictName = _districtCtrl.text;
 
-    // ✅ text var ama id yoksa eşle
     if (tmpCityId == null && _cities.isNotEmpty) {
       final cityLower = _clean(tmpCityName).toLowerCase();
       if (cityLower.isNotEmpty) {
@@ -635,14 +617,14 @@ class _ListingListPageState extends State<ListingListPage> {
       builder: (ctx) {
         final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
         final safeBottom = MediaQuery.of(ctx).padding.bottom;
-        final bottomPad = bottomInset + safeBottom + 16;
+        final bottomPad = bottomInset + safeBottom + AppUI.gap(ctx, 16);
 
         return SafeArea(
           child: Padding(
             padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 8,
+              left: AppUI.gap(ctx, 16),
+              right: AppUI.gap(ctx, 16),
+              top: AppUI.gap(ctx, 8),
               bottom: bottomPad,
             ),
             child: StatefulBuilder(
@@ -653,15 +635,15 @@ class _ListingListPageState extends State<ListingListPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(height: 6),
-                      const Text(
+                      SizedBox(height: AppUI.gap(ctx, 6)),
+                      Text(
                         'Filtrele',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: AppUI.fs(ctx, 18),
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: AppUI.gap(ctx, 12)),
 
                       DropdownButtonFormField<ListingType?>(
                         value: tmpType,
@@ -692,7 +674,7 @@ class _ListingListPageState extends State<ListingListPage> {
                           });
                         },
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: AppUI.gap(ctx, 12)),
 
                       if (isItem)
                         DropdownButtonFormField<ItemCategory?>(
@@ -738,7 +720,7 @@ class _ListingListPageState extends State<ListingListPage> {
                           onChanged: (v) => setLocal(() => tmpPeriod = v),
                         ),
 
-                      const SizedBox(height: 12),
+                      SizedBox(height: AppUI.gap(ctx, 12)),
 
                       if (_locError != null) ...[
                         Align(
@@ -748,7 +730,7 @@ class _ListingListPageState extends State<ListingListPage> {
                             style: const TextStyle(color: Colors.red),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: AppUI.gap(ctx, 8)),
                       ],
 
                       DropdownButtonFormField<int?>(
@@ -780,9 +762,7 @@ class _ListingListPageState extends State<ListingListPage> {
                                 });
 
                                 if (v == null) {
-                                  setLocal(() {
-                                    tmpCityName = '';
-                                  });
+                                  setLocal(() => tmpCityName = '');
                                   _districts = [];
                                   if (mounted) setLocal(() {});
                                   return;
@@ -791,16 +771,14 @@ class _ListingListPageState extends State<ListingListPage> {
                                 final city = _cities.firstWhere(
                                   (c) => c.id == v,
                                 );
-                                setLocal(() {
-                                  tmpCityName = city.name;
-                                });
+                                setLocal(() => tmpCityName = city.name);
 
                                 await _loadDistricts(v);
                                 if (mounted) setLocal(() {});
                               },
                       ),
 
-                      const SizedBox(height: 12),
+                      SizedBox(height: AppUI.gap(ctx, 12)),
 
                       DropdownButtonFormField<int?>(
                         value: tmpDistrictId,
@@ -840,11 +818,11 @@ class _ListingListPageState extends State<ListingListPage> {
                               },
                       ),
 
-                      const SizedBox(height: 10),
+                      SizedBox(height: AppUI.gap(ctx, 10)),
                       if (_loadingCities || _loadingDistricts)
                         const LinearProgressIndicator(minHeight: 2),
 
-                      const SizedBox(height: 14),
+                      SizedBox(height: AppUI.gap(ctx, 14)),
                       Row(
                         children: [
                           Expanded(
@@ -863,7 +841,7 @@ class _ListingListPageState extends State<ListingListPage> {
                               child: const Text('Sıfırla'),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          SizedBox(width: AppUI.gap(ctx, 10)),
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () => Navigator.pop(ctx, true),
@@ -872,7 +850,7 @@ class _ListingListPageState extends State<ListingListPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: AppUI.gap(ctx, 6)),
                     ],
                   ),
                 );
@@ -917,6 +895,7 @@ class _ListingListPageState extends State<ListingListPage> {
   // ✅ listing_list_page.dart
   // ✅ PART 2 / 2
   // ==========================
+
   // ✅ KAYITLI ARAMALAR: AÇ
   Future<void> _openSavedSearchesSheet() async {
     final user = _sb.auth.currentUser;
@@ -933,36 +912,43 @@ class _ListingListPageState extends State<ListingListPage> {
         return SafeArea(
           child: Padding(
             padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 8,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+              left: AppUI.gap(ctx, 16),
+              right: AppUI.gap(ctx, 16),
+              top: AppUI.gap(ctx, 8),
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + AppUI.gap(ctx, 16),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'Kayıtlı Aramalar',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                  style: TextStyle(
+                    fontSize: AppUI.fs(ctx, 18),
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: AppUI.gap(ctx, 10)),
                 FutureBuilder<List<SavedSearch>>(
                   future: _savedSearchService.fetch(),
                   builder: (context, snap) {
                     if (snap.connectionState == ConnectionState.waiting) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 18),
-                        child: Center(child: CircularProgressIndicator()),
+                      return Padding(
+                        padding: EdgeInsets.symmetric(
+                          vertical: AppUI.gap(ctx, 18),
+                        ),
+                        child: const Center(child: CircularProgressIndicator()),
                       );
                     }
 
                     if (snap.hasError) {
                       return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: EdgeInsets.symmetric(
+                          vertical: AppUI.gap(ctx, 14),
+                        ),
                         child: Column(
                           children: [
                             Text('Hata: ${snap.error}'),
-                            const SizedBox(height: 10),
+                            SizedBox(height: AppUI.gap(ctx, 10)),
                             ElevatedButton(
                               onPressed: () => Navigator.pop(ctx),
                               child: const Text('Kapat'),
@@ -974,9 +960,11 @@ class _ListingListPageState extends State<ListingListPage> {
 
                     final list = snap.data ?? [];
                     if (list.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 18),
-                        child: Text('Henüz kayıtlı arama yok.'),
+                      return Padding(
+                        padding: EdgeInsets.symmetric(
+                          vertical: AppUI.gap(ctx, 18),
+                        ),
+                        child: const Text('Henüz kayıtlı arama yok.'),
                       );
                     }
 
@@ -984,7 +972,8 @@ class _ListingListPageState extends State<ListingListPage> {
                       child: ListView.separated(
                         shrinkWrap: true,
                         itemCount: list.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        separatorBuilder: (_, _) =>
+                            SizedBox(height: AppUI.gap(ctx, 10)),
                         itemBuilder: (_, i) {
                           final s = list[i];
                           final subtitle = _filtersSummary(s.filters);
@@ -992,11 +981,13 @@ class _ListingListPageState extends State<ListingListPage> {
                           return Card(
                             elevation: 0,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(
+                                AppUI.r(ctx, 14),
+                              ),
                               side: BorderSide(color: Colors.grey.shade200),
                             ),
                             child: Padding(
-                              padding: const EdgeInsets.all(12),
+                              padding: EdgeInsets.all(AppUI.gap(ctx, 12)),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -1005,10 +996,10 @@ class _ListingListPageState extends State<ListingListPage> {
                                     style: TextStyle(
                                       color: Colors.grey.shade800,
                                       fontWeight: FontWeight.w800,
-                                      fontSize: 15,
+                                      fontSize: AppUI.fs(ctx, 15),
                                     ),
                                   ),
-                                  const SizedBox(height: 10),
+                                  SizedBox(height: AppUI.gap(ctx, 10)),
                                   Row(
                                     children: [
                                       Expanded(
@@ -1021,7 +1012,7 @@ class _ListingListPageState extends State<ListingListPage> {
                                           label: const Text('Uygula'),
                                         ),
                                       ),
-                                      const SizedBox(width: 10),
+                                      SizedBox(width: AppUI.gap(ctx, 10)),
                                       OutlinedButton.icon(
                                         onPressed: () async {
                                           final ok = await _confirm(
@@ -1112,7 +1103,7 @@ class _ListingListPageState extends State<ListingListPage> {
     });
 
     await _ensureCitiesLoaded();
-    await _loadCities(); // text->id eşleşsin
+    await _loadCities();
     await _load();
 
     if (!mounted) return;
@@ -1158,7 +1149,7 @@ class _ListingListPageState extends State<ListingListPage> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: AppUI.gap(ctx, 10)),
               Text(
                 _filtersSummary({
                   'type': _type?.name,
@@ -1289,7 +1280,6 @@ class _ListingListPageState extends State<ListingListPage> {
     return x;
   }
 
-  // ✅ ÜSTTE AKTİF FİLTRE CHIP
   String get _activeFilterChipText {
     final typeLabel = _type?.label ?? 'Hepsi';
     final city = _clean(_cityCtrl.text);
@@ -1363,19 +1353,21 @@ class _ListingListPageState extends State<ListingListPage> {
     }
   }
 
-  // ✅ küçük chip (kompakt)
   Widget _miniChip(String text, {Color? bg, Color? fg}) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppUI.gap(context, 8),
+        vertical: AppUI.gap(context, 4),
+      ),
       decoration: BoxDecoration(
         color: bg ?? theme.colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 999)),
       ),
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: AppUI.fs(context, 11),
           color: fg ?? theme.colorScheme.onSurfaceVariant,
           fontWeight: FontWeight.w700,
         ),
@@ -1383,7 +1375,6 @@ class _ListingListPageState extends State<ListingListPage> {
     );
   }
 
-  // ✅ SABİT ARAMA + FİLTRE
   Widget _topSearchAndFilterBar() {
     final theme = Theme.of(context);
 
@@ -1393,22 +1384,25 @@ class _ListingListPageState extends State<ListingListPage> {
         GestureDetector(
           onTap: _openFilterSheet,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppUI.gap(context, 10),
+              vertical: AppUI.gap(context, 6),
+            ),
             decoration: BoxDecoration(
               color: theme.colorScheme.primary.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(AppUI.r(context, 999)),
             ),
             child: Text(
               _activeFilterChipText,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: AppUI.fs(context, 12),
                 fontWeight: FontWeight.w800,
                 color: theme.colorScheme.primary,
               ),
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: AppUI.gap(context, 10)),
         TextField(
           controller: _qCtrl,
           textInputAction: TextInputAction.search,
@@ -1416,10 +1410,12 @@ class _ListingListPageState extends State<ListingListPage> {
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search),
             hintText: 'Ara (başlık / açıklama / tür)',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 12,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppUI.r(context, 14)),
+            ),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: AppUI.gap(context, 12),
+              vertical: AppUI.gap(context, 12),
             ),
             suffixIcon: _clean(_qCtrl.text).isEmpty
                 ? null
@@ -1438,20 +1434,23 @@ class _ListingListPageState extends State<ListingListPage> {
     );
   }
 
-  // ---------------------- UI: CARD (KOMPAKT) ----------------------
+  // ---------------------- UI: CARD ----------------------
 
   Widget _listingCard(Map<String, dynamic> it) {
     final id = (it['id'] ?? '').toString();
     final firstUrl = _firstImageUrlCache[id];
 
     final title = _clean((it['title'] ?? '').toString());
-
     final typeLabel = _fmtType(it);
     final priceLabel = _fmtPrice(it);
     final loc = _fmtLocation(it);
 
+    final radiusCard = AppUI.r(context, 16);
+    final radiusImg = AppUI.r(context, 12);
+    final imgSize = AppUI.r(context, 96);
+
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(radiusCard),
       onTap: () {
         final copy = Map<String, dynamic>.from(it);
         Navigator.push(
@@ -1461,21 +1460,21 @@ class _ListingListPageState extends State<ListingListPage> {
       },
       child: Card(
         elevation: 0,
-        margin: const EdgeInsets.only(bottom: 10),
+        margin: EdgeInsets.only(bottom: AppUI.gap(context, 10)),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radiusCard),
           side: BorderSide(color: Colors.grey.shade200),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(AppUI.gap(context, 10)),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(radiusImg),
                 child: SizedBox(
-                  width: 96,
-                  height: 96,
+                  width: imgSize,
+                  height: imgSize,
                   child: Stack(
                     children: [
                       Positioned.fill(
@@ -1486,7 +1485,7 @@ class _ListingListPageState extends State<ListingListPage> {
                                 child: Icon(
                                   Icons.image_outlined,
                                   color: Colors.grey.shade500,
-                                  size: 30,
+                                  size: AppUI.r(context, 30),
                                 ),
                               )
                             : Image.network(
@@ -1498,7 +1497,7 @@ class _ListingListPageState extends State<ListingListPage> {
                                   child: Icon(
                                     Icons.broken_image_outlined,
                                     color: Colors.grey.shade500,
-                                    size: 30,
+                                    size: AppUI.r(context, 30),
                                   ),
                                 ),
                                 loadingBuilder: (context, child, progress) {
@@ -1506,10 +1505,10 @@ class _ListingListPageState extends State<ListingListPage> {
                                   return Container(
                                     color: Colors.grey.shade100,
                                     alignment: Alignment.center,
-                                    child: const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
+                                    child: SizedBox(
+                                      width: AppUI.r(context, 18),
+                                      height: AppUI.r(context, 18),
+                                      child: const CircularProgressIndicator(
                                         strokeWidth: 2,
                                       ),
                                     ),
@@ -1517,15 +1516,18 @@ class _ListingListPageState extends State<ListingListPage> {
                                 },
                               ),
                       ),
-                      // ✅ Doping ⭐ rozet
-                      Positioned(left: 6, top: 6, child: _boostStarBadge(it)),
+                      Positioned(
+                        left: AppUI.gap(context, 6),
+                        top: AppUI.gap(context, 6),
+                        child: _boostStarBadge(it),
+                      ),
 
-                      // ❌ ACİL yazı etiketi kaldırıldı (stabil UI için)
+                      // ❌ ACİL yazı etiketi yok (tamamen kaldırıldı)
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: AppUI.gap(context, 10)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1534,22 +1536,22 @@ class _ListingListPageState extends State<ListingListPage> {
                       title.isEmpty ? '(Başlıksız ilan)' : title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
+                      style: TextStyle(
+                        fontSize: AppUI.fs(context, 15),
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: AppUI.gap(context, 6)),
                     Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
+                      spacing: AppUI.gap(context, 6),
+                      runSpacing: AppUI.gap(context, 6),
                       children: [
                         _miniChip(typeLabel),
                         _miniChip(priceLabel),
                         _miniChip(loc.isNotEmpty ? loc : 'Konum yok'),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: AppUI.gap(context, 4)),
                   ],
                 ),
               ),
@@ -1564,9 +1566,8 @@ class _ListingListPageState extends State<ListingListPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Stabil görünüm: farklı telefonlarda font ölçeği yüzünden kaymayı engeller
+    // ✅ Stabil görünüm: cihazların "yazı boyutu" (font scaling) farkını dengeler
     final mq = MediaQuery.of(context);
-
     return MediaQuery(
       data: mq.copyWith(textScaler: const TextScaler.linear(1.0)),
       child: _buildScaffold(context),
@@ -1633,7 +1634,7 @@ class _ListingListPageState extends State<ListingListPage> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: maxW),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: AppUI.pagePadding(context),
                 child: _topSearchAndFilterBar(),
               ),
             ),
@@ -1644,24 +1645,24 @@ class _ListingListPageState extends State<ListingListPage> {
               onRefresh: _load,
               child: _loading
                   ? ListView(
-                      children: const [
-                        SizedBox(height: 220),
-                        Center(child: CircularProgressIndicator()),
+                      children: [
+                        SizedBox(height: AppUI.gap(context, 220)),
+                        const Center(child: CircularProgressIndicator()),
                       ],
                     )
                   : (_error != null)
                   ? ListView(
                       children: [
-                        const SizedBox(height: 120),
+                        SizedBox(height: AppUI.gap(context, 120)),
                         Padding(
-                          padding: const EdgeInsets.all(16),
+                          padding: AppUI.pagePadding(context),
                           child: Column(
                             children: [
                               Text(
                                 'Hata: $_error',
                                 textAlign: TextAlign.center,
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppUI.gap(context, 12)),
                               ElevatedButton(
                                 onPressed: _load,
                                 child: const Text('Tekrar dene'),
@@ -1671,40 +1672,37 @@ class _ListingListPageState extends State<ListingListPage> {
                         ),
                       ],
                     )
-                  : LayoutBuilder(
-                      builder: (context, c) {
-                        return ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                          children: [
-                            Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: maxW,
-                                ),
-                                child: _items.isEmpty
-                                    ? Column(
-                                        children: const [
-                                          SizedBox(height: 120),
-                                          Icon(
-                                            Icons.inbox_outlined,
-                                            size: 48,
-                                            color: Colors.grey,
-                                          ),
-                                          SizedBox(height: 10),
-                                          Text('Henüz ilan yok.'),
-                                        ],
-                                      )
-                                    : Column(
-                                        children: _items
-                                            .map(_listingCard)
-                                            .toList(),
+                  : ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                        AppUI.gap(context, 16),
+                        AppUI.gap(context, 12),
+                        AppUI.gap(context, 16),
+                        AppUI.gap(context, 24),
+                      ),
+                      children: [
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: maxW),
+                            child: _items.isEmpty
+                                ? Column(
+                                    children: [
+                                      SizedBox(height: AppUI.gap(context, 120)),
+                                      Icon(
+                                        Icons.inbox_outlined,
+                                        size: AppUI.r(context, 48),
+                                        color: Colors.grey,
                                       ),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
+                                      SizedBox(height: AppUI.gap(context, 10)),
+                                      const Text('Henüz ilan yok.'),
+                                    ],
+                                  )
+                                : Column(
+                                    children: _items.map(_listingCard).toList(),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
             ),
           ),

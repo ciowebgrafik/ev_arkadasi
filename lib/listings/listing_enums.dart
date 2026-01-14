@@ -17,10 +17,15 @@ enum ListingType {
 /// ✅ Fiyat periyodu
 enum PricePeriod { once, daily, weekly, monthly, yearly }
 
-// ================= DB <-> ENUM (safe) =================
+// ================= DB <-> ENUM (ULTRA SAFE) =================
 
-ListingType listingTypeFromDb(String v) {
-  final value = v.trim().toLowerCase();
+/// ✅ Her yerden (dynamic/null) güvenle parse etmek için
+String _norm(dynamic v) => (v ?? '').toString().trim().toLowerCase();
+
+ListingType listingTypeFromDb(dynamic v) {
+  final value = _norm(v);
+
+  if (value.isEmpty) return ListingType.roommate;
 
   // ✅ DB'de local_shop var -> enum local
   if (value == 'local_shop') return ListingType.local;
@@ -28,18 +33,32 @@ ListingType listingTypeFromDb(String v) {
   // ✅ eski verilerde job varsa daily_job'a çevir (geriye uyumluluk)
   if (value == 'job') return ListingType.daily_job;
 
-  return ListingType.values.firstWhere(
-    (e) => e.name.toLowerCase() == value,
-    orElse: () => ListingType.roommate,
-  );
+  // ✅ bazen "daily-job" / "daily job" gibi saçma veriler gelebilir
+  if (value == 'daily-job' || value == 'daily job')
+    return ListingType.daily_job;
+
+  // ✅ güvenli arama
+  for (final e in ListingType.values) {
+    if (e.name.toLowerCase() == value) return e;
+  }
+
+  // ✅ tanınmayan type -> patlamasın
+  return ListingType.roommate;
 }
 
-PricePeriod pricePeriodFromDb(String v) {
-  final value = v.trim().toLowerCase();
-  return PricePeriod.values.firstWhere(
-    (e) => e.name.toLowerCase() == value,
-    orElse: () => PricePeriod.once, // ✅ default: Tek Sefer
-  );
+PricePeriod pricePeriodFromDb(dynamic v) {
+  final value = _norm(v);
+  if (value.isEmpty) return PricePeriod.once;
+
+  // ✅ bazen "tek_sefer" gibi gelirse:
+  if (value == 'tek_sefer' || value == 'teksefer') return PricePeriod.once;
+
+  for (final e in PricePeriod.values) {
+    if (e.name.toLowerCase() == value) return e;
+  }
+
+  // ✅ tanınmayan period -> patlamasın
+  return PricePeriod.once; // default: Tek Sefer
 }
 
 /// ✅ Enum -> DB

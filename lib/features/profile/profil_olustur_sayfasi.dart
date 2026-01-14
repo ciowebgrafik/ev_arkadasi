@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+// ✅ AppUI
+import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -197,7 +199,7 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
         'full_name': fullName,
         'phone': phone,
         'city': city,
-        'district': district, // ✅ profiles tablosunda district (text) olmalı
+        'district': district,
         'bio': bio.isEmpty ? null : bio,
         'avatar_path': avatarPath,
         'has_password': false,
@@ -219,9 +221,9 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
 
   Widget _cityDropdown() {
     if (_loadingCities) {
-      return const SizedBox(
-        height: 56,
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      return SizedBox(
+        height: AppUI.gap(context, 56),
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
 
@@ -263,9 +265,13 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
 
               await _loadDistrictsOfCityId(id);
             },
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         labelText: 'Şehir',
-        border: OutlineInputBorder(),
+        border: const OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: AppUI.gap(context, 12),
+          vertical: AppUI.gap(context, 14),
+        ),
       ),
     );
   }
@@ -274,9 +280,9 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
     final disabled = _saving || _selectedCityId == null;
 
     if (_loadingDistricts) {
-      return const SizedBox(
-        height: 56,
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      return SizedBox(
+        height: AppUI.gap(context, 56),
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
 
@@ -304,6 +310,10 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
         hintText: (_selectedCityId == null)
             ? 'Önce şehir seç'
             : (_districts.isEmpty ? 'İlçe bulunamadı' : null),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: AppUI.gap(context, 12),
+          vertical: AppUI.gap(context, 14),
+        ),
       ),
     );
   }
@@ -313,13 +323,18 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✅ Klavye açılınca otomatik ittir (stabil)
       resizeToAvoidBottomInset: true,
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
-        title: const Text('Profil Oluştur'),
+        title: Text(
+          'Profil Oluştur',
+          style: TextStyle(
+            fontSize: AppUI.fs(context, 16),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         centerTitle: true,
         actions: [
           IconButton(
@@ -353,7 +368,12 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
                     SingleChildScrollView(
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                      padding: EdgeInsets.fromLTRB(
+                        AppUI.gap(context, 16),
+                        AppUI.gap(context, 16),
+                        AppUI.gap(context, 16),
+                        AppUI.gap(context, 20),
+                      ),
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
                           minHeight: constraints.maxHeight,
@@ -364,74 +384,94 @@ class _ProfilOlusturSayfasiState extends State<ProfilOlusturSayfasi> {
                               GestureDetector(
                                 onTap: _saving ? null : _fotoSec,
                                 child: CircleAvatar(
-                                  radius: 52,
+                                  radius: AppUI.r(context, 52),
                                   backgroundColor: Colors.grey.shade200,
                                   backgroundImage: _avatarBytes != null
                                       ? MemoryImage(_avatarBytes!)
                                       : null,
                                   child: _avatarBytes == null
-                                      ? const Icon(Icons.camera_alt, size: 32)
+                                      ? Icon(
+                                          Icons.camera_alt,
+                                          size: AppUI.fs(context, 32),
+                                        )
                                       : null,
                                 ),
                               ),
-                              const SizedBox(height: 20),
+                              SizedBox(height: AppUI.gap(context, 20)),
                               TextField(
                                 controller: _adController,
                                 textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   labelText: 'Ad Soyad',
-                                  border: OutlineInputBorder(),
+                                  border: const OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: AppUI.gap(context, 12),
+                                    vertical: AppUI.gap(context, 14),
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppUI.gap(context, 12)),
                               TextField(
                                 controller: _telefonController,
                                 textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   labelText: 'Telefon',
-                                  border: OutlineInputBorder(),
+                                  border: const OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: AppUI.gap(context, 12),
+                                    vertical: AppUI.gap(context, 14),
+                                  ),
                                 ),
                                 keyboardType: TextInputType.phone,
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppUI.gap(context, 12)),
                               _cityDropdown(),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppUI.gap(context, 12)),
                               _districtDropdown(),
-                              const SizedBox(height: 12),
+                              SizedBox(height: AppUI.gap(context, 12)),
                               TextField(
                                 controller: _bioController,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   labelText: 'Hakkımda',
-                                  border: OutlineInputBorder(),
+                                  border: const OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: AppUI.gap(context, 12),
+                                    vertical: AppUI.gap(context, 14),
+                                  ),
                                 ),
                                 maxLines: 3,
                                 textInputAction: TextInputAction.newline,
                               ),
-                              const SizedBox(height: 24),
+                              SizedBox(height: AppUI.gap(context, 24)),
                               SizedBox(
                                 width: double.infinity,
-                                height: 52,
+                                height: AppUI.gap(context, 52),
                                 child: ElevatedButton(
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: kTurkuaz,
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(
+                                        AppUI.r(context, 12),
+                                      ),
                                     ),
                                   ),
                                   onPressed: _saving ? null : _kaydet,
                                   child: Text(
                                     _saving ? 'Kaydediliyor...' : 'Kaydet',
+                                    style: TextStyle(
+                                      fontSize: AppUI.fs(context, 15),
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 40),
+                              SizedBox(height: AppUI.gap(context, 40)),
                             ],
                           ),
                         ),
                       ),
                     ),
-
                     if (_saving)
                       AbsorbPointer(
                         absorbing: true,

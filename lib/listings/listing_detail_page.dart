@@ -1,3 +1,4 @@
+import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:share_plus/share_plus.dart';
@@ -111,9 +112,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   }) async {
     final p = _normalizeTrPhone(phone);
     if (p.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('WhatsApp için telefon numarası yok.')),
-      );
+      _snack('WhatsApp için telefon numarası yok.');
       return;
     }
 
@@ -121,11 +120,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     final uri = Uri.parse('https://wa.me/$p?text=$text');
 
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('WhatsApp açılamadı.')));
-    }
+    if (!ok && mounted) _snack('WhatsApp açılamadı.');
   }
 
   // ---------------------- Favori / Harita / Şikayet ----------------------
@@ -133,9 +128,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   Future<void> _loadFavoriteStatus() async {
     final user = Supabase.instance.client.auth.currentUser;
 
-    if (mounted) {
-      setState(() => _favLoading = true);
-    }
+    if (mounted) setState(() => _favLoading = true);
 
     try {
       if (user == null) {
@@ -169,17 +162,13 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     final user = Supabase.instance.client.auth.currentUser;
 
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Favori için giriş yapmalısın.')),
-      );
+      _snack('Favori için giriş yapmalısın.');
       return;
     }
 
     final id = _listingId();
     if (id.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('İlan ID bulunamadı.')));
+      _snack('İlan ID bulunamadı.');
       return;
     }
 
@@ -198,9 +187,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
         if (!mounted) return;
         setState(() => _isFav = false);
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Favoriden çıkarıldı ❌')));
+        _snack('Favoriden çıkarıldı ❌');
       } else {
         await Supabase.instance.client.from('favorites').upsert({
           'user_id': user.id,
@@ -210,15 +197,11 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
         if (!mounted) return;
         setState(() => _isFav = true);
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Favorilere eklendi ✅')));
+        _snack('Favorilere eklendi ✅');
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Favori işlemi hata: $e')));
+      _snack('Favori işlemi hata: $e');
     } finally {
       if (mounted) setState(() => _favLoading = false);
     }
@@ -234,11 +217,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$q');
 
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Harita açılamadı.')));
-    }
+    if (!ok && mounted) _snack('Harita açılamadı.');
   }
 
   Future<void> _submitReport({
@@ -247,17 +226,13 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   }) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Şikayet için giriş yapmalısın.')),
-      );
+      _snack('Şikayet için giriş yapmalısın.');
       return;
     }
 
     final listingId = _listingId();
     if (listingId.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('İlan ID bulunamadı.')));
+      _snack('İlan ID bulunamadı.');
       return;
     }
 
@@ -276,13 +251,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       if (!mounted) return;
       Navigator.pop(context);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Şikayet gönderildi ✅'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
+      _snack('Şikayet gönderildi ✅');
       _reportTextCtrl.clear();
     } on PostgrestException catch (e) {
       final code = (e.code ?? '').toString();
@@ -291,31 +260,14 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       Navigator.pop(context);
 
       if (code == '23505') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bu ilanı zaten şikayet ettin.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _snack('Bu ilanı zaten şikayet ettin.');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Şikayet hatası: ${e.message}'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _snack('Şikayet hatası: ${e.message}');
       }
     } catch (e) {
       if (!mounted) return;
-
       Navigator.pop(context);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Şikayet hatası: $e'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _snack('Şikayet hatası: $e');
     } finally {
       if (mounted) setState(() => _reportLoading = false);
     }
@@ -335,21 +287,26 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
             behavior: HitTestBehavior.opaque,
             onTap: () => FocusScope.of(context).unfocus(),
             child: Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottom),
+              padding: EdgeInsets.fromLTRB(
+                AppUI.gap(context, 16),
+                AppUI.gap(context, 16),
+                AppUI.gap(context, 16),
+                AppUI.gap(context, 16) + bottom,
+              ),
               child: SingleChildScrollView(
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       'Şikayet Et',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: AppUI.fs(context, 18),
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: AppUI.gap(context, 10)),
                     TextField(
                       controller: _reportTextCtrl,
                       minLines: 2,
@@ -359,11 +316,17 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       decoration: InputDecoration(
                         hintText: 'Kısaca detay yaz (opsiyonel)',
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(
+                            AppUI.r(context, 12),
+                          ),
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: AppUI.gap(context, 12),
+                          vertical: AppUI.gap(context, 14),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: AppUI.gap(context, 12)),
                     _reportTile(
                       icon: Icons.report_gmailerrorred_outlined,
                       title: 'Sahte ilan / dolandırıcılık',
@@ -379,7 +342,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       title: 'Diğer',
                       reason: 'other',
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: AppUI.gap(context, 6)),
                   ],
                 ),
               ),
@@ -401,10 +364,10 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       leading: Icon(icon),
       title: Text(title),
       trailing: _reportLoading
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          ? SizedBox(
+              width: AppUI.gap(context, 18),
+              height: AppUI.gap(context, 18),
+              child: const CircularProgressIndicator(strokeWidth: 2),
             )
           : IconButton(
               icon: const Icon(Icons.chevron_right),
@@ -421,11 +384,14 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 14)),
         side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppUI.gap(context, 8),
+          vertical: AppUI.gap(context, 6),
+        ),
         child: Row(
           children: [
             Expanded(
@@ -439,7 +405,11 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                 ),
               ),
             ),
-            Container(width: 1, height: 26, color: Colors.grey.shade300),
+            Container(
+              width: 1,
+              height: AppUI.gap(context, 26),
+              color: Colors.grey.shade300,
+            ),
             Expanded(
               child: TextButton.icon(
                 onPressed: () =>
@@ -448,7 +418,11 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                 label: const Text('Haritada'),
               ),
             ),
-            Container(width: 1, height: 26, color: Colors.grey.shade300),
+            Container(
+              width: 1,
+              height: AppUI.gap(context, 26),
+              color: Colors.grey.shade300,
+            ),
             Expanded(
               child: TextButton.icon(
                 onPressed: _reportListing,
@@ -505,6 +479,13 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   }
 
   // ---------------------- helpers ----------------------
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
+  }
 
   String _clean(String s) => s.toString().trim();
 
@@ -603,15 +584,18 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   Widget _chip(String text, {Color? bg, Color? fg}) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppUI.gap(context, 10),
+        vertical: AppUI.gap(context, 6),
+      ),
       decoration: BoxDecoration(
         color: bg ?? theme.colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 999)),
       ),
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: AppUI.fs(context, 12),
           color: fg ?? theme.colorScheme.onSurfaceVariant,
           fontWeight: FontWeight.w600,
         ),
@@ -623,20 +607,23 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     final theme = Theme.of(context);
     final c = fg ?? theme.colorScheme.onSurfaceVariant;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppUI.gap(context, 10),
+        vertical: AppUI.gap(context, 6),
+      ),
       decoration: BoxDecoration(
         color: bg ?? theme.colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 999)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: c),
-          const SizedBox(width: 6),
+          Icon(icon, size: AppUI.fs(context, 14), color: c),
+          SizedBox(width: AppUI.gap(context, 6)),
           Text(
             text,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: AppUI.fs(context, 12),
               color: c,
               fontWeight: FontWeight.w600,
             ),
@@ -649,16 +636,16 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   Widget _imageArea() {
     if (_loadingImages) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 16)),
         child: AspectRatio(
           aspectRatio: 16 / 9,
           child: Container(
             color: Colors.grey.shade100,
             alignment: Alignment.center,
-            child: const SizedBox(
-              width: 26,
-              height: 26,
-              child: CircularProgressIndicator(strokeWidth: 2),
+            child: SizedBox(
+              width: AppUI.gap(context, 26),
+              height: AppUI.gap(context, 26),
+              child: const CircularProgressIndicator(strokeWidth: 2),
             ),
           ),
         ),
@@ -667,13 +654,13 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
     if (_imgError != null) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 16)),
         child: AspectRatio(
           aspectRatio: 16 / 9,
           child: Container(
             color: Colors.grey.shade100,
             alignment: Alignment.center,
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(AppUI.gap(context, 12)),
             child: Text('Foto yüklenemedi: $_imgError'),
           ),
         ),
@@ -682,7 +669,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
     if (_signedUrls.isEmpty) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 16)),
         child: AspectRatio(
           aspectRatio: 16 / 9,
           child: Container(
@@ -698,7 +685,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     }
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AppUI.r(context, 16)),
       child: Stack(
         children: [
           AspectRatio(
@@ -727,10 +714,10 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     return Container(
                       color: Colors.grey.shade100,
                       alignment: Alignment.center,
-                      child: const SizedBox(
-                        width: 26,
-                        height: 26,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                      child: SizedBox(
+                        width: AppUI.gap(context, 26),
+                        height: AppUI.gap(context, 26),
+                        child: const CircularProgressIndicator(strokeWidth: 2),
                       ),
                     );
                   },
@@ -739,19 +726,23 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
             ),
           ),
           Positioned(
-            left: 10,
-            top: 10,
+            left: AppUI.gap(context, 10),
+            top: AppUI.gap(context, 10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: AppUI.gap(context, 10),
+                vertical: AppUI.gap(context, 6),
+              ),
               decoration: BoxDecoration(
                 color: Colors.black.withAlpha((0.55 * 255).round()),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(AppUI.r(context, 999)),
               ),
               child: Text(
                 '${_index + 1}/${_signedUrls.length}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
+                  fontSize: AppUI.fs(context, 12),
                 ),
               ),
             ),
@@ -776,38 +767,38 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 14)),
         side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(AppUI.gap(context, 12)),
         child: Row(
           children: [
             CircleAvatar(
-              radius: 20,
+              radius: AppUI.gap(context, 20),
               backgroundColor: Colors.grey.shade100,
               child: Icon(Icons.person, color: Colors.grey.shade600),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: AppUI.gap(context, 12)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     name.isEmpty ? 'İlan Sahibi' : name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
-                      fontSize: 14,
+                      fontSize: AppUI.fs(context, 14),
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  SizedBox(height: AppUI.gap(context, 2)),
                   Text(
                     [
                       if (city.isNotEmpty) city,
                       if (phone.isNotEmpty) phone,
                     ].join(' • '),
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppUI.fs(context, 12),
                       color: Colors.grey.shade700,
                       fontWeight: FontWeight.w600,
                     ),
@@ -883,12 +874,17 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      // ✅ Bu sayfada TextField sadece bottom sheet’te var ama yine de güvenli:
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
-        title: const Text('İlan Detayı'),
+        title: Text(
+          'İlan Detayı',
+          style: TextStyle(
+            fontSize: AppUI.fs(context, 16),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -927,9 +923,14 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
             SliverPersistentHeader(
               pinned: true,
               delegate: _StickyHeaderDelegate(
-                height: 72,
+                height: AppUI.gap(context, 72),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  padding: EdgeInsets.fromLTRB(
+                    AppUI.gap(context, 12),
+                    AppUI.gap(context, 8),
+                    AppUI.gap(context, 12),
+                    AppUI.gap(context, 8),
+                  ),
                   child: _underAppBarActions(
                     title: title.isEmpty ? 'İlan' : title,
                     locationText: location,
@@ -938,32 +939,32 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(AppUI.gap(context, 12)),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   _imageArea(),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppUI.gap(context, 12)),
                   Row(
                     children: [
                       Expanded(
                         child: Text(
                           title.isEmpty ? '(Başlıksız)' : title,
-                          style: const TextStyle(
-                            fontSize: 20,
+                          style: TextStyle(
+                            fontSize: AppUI.fs(context, 20),
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
                       if (urgent) ...[
-                        const SizedBox(width: 10),
+                        SizedBox(width: AppUI.gap(context, 10)),
                         _chip('ACİL', bg: Colors.red, fg: Colors.white),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: AppUI.gap(context, 10)),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: AppUI.gap(context, 8),
+                    runSpacing: AppUI.gap(context, 8),
                     children: [
                       _chip(typeLabel),
                       _chip(_fmtPrice(it)),
@@ -978,44 +979,50 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       if (phone.isNotEmpty) _chip('Tel: $phone'),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  SizedBox(height: AppUI.gap(context, 14)),
                   _ownerCard(
                     ownerName: ownerName,
                     phone: phone,
                     ownerCity: ownerCity,
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: AppUI.gap(context, 10)),
                   if (showRoommateExtras) ...[
                     ListingRulesSection(rules: rules),
-                    const SizedBox(height: 10),
+                    SizedBox(height: AppUI.gap(context, 10)),
                     ListingPreferencesSection(preferences: preferences),
-                    const SizedBox(height: 10),
+                    SizedBox(height: AppUI.gap(context, 10)),
                   ],
                   if (desc.isNotEmpty) ...[
                     Card(
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(
+                          AppUI.r(context, 14),
+                        ),
                         side: BorderSide(color: Colors.grey.shade200),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(12),
+                        padding: EdgeInsets.all(AppUI.gap(context, 12)),
                         child: Text(
                           desc,
-                          style: const TextStyle(fontSize: 15, height: 1.35),
+                          style: TextStyle(
+                            fontSize: AppUI.fs(context, 15),
+                            height: 1.35,
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
-
+                    SizedBox(height: AppUI.gap(context, 14)),
                     SizedBox(
                       width: double.infinity,
-                      height: 48,
+                      height: AppUI.gap(context, 48),
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF25D366),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(
+                              AppUI.r(context, 12),
+                            ),
                           ),
                         ),
                         onPressed: _isValidWhatsappPhone(phone)
@@ -1030,17 +1037,18 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                           color: Colors.white,
                           size: 20,
                         ),
-                        label: const Text(
+                        label: Text(
                           'WhatsApp ile İletişime Geç',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 15,
+                            fontSize: AppUI.fs(context, 15),
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                     ),
                   ],
+                  SizedBox(height: AppUI.gap(context, 18)),
                 ]),
               ),
             ),

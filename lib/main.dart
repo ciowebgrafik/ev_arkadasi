@@ -25,7 +25,18 @@ class MyApp extends StatelessWidget {
       title: 'Ev Arkadaşım',
       theme: AppTheme.light(),
 
-      // ✅ Splash bozulmaz
+      builder: (context, child) {
+        final base = MediaQueryData.fromView(View.of(context));
+        return MediaQuery(
+          data: base.copyWith(
+            textScaler: const TextScaler.linear(1.0),
+            // ✅ sistem font büyütmeyi kapatır
+            boldText: false,
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+
       home: const SplashPage(),
     );
   }

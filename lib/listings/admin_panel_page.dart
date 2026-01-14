@@ -1,3 +1,5 @@
+// ✅ APP UI
+import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,7 +17,8 @@ class AdminPanelPage extends StatefulWidget {
 
 class _AdminPanelPageState extends State<AdminPanelPage>
     with SingleTickerProviderStateMixin {
-  static const Color kTurkuaz = Color(0xFF00B8D4);
+  // ✅ AppUI’dan renk
+  static const Color kTurkuaz = AppUI.kTurkuaz;
 
   final SupabaseClient _sb = Supabase.instance.client;
   final ListingsService _service = ListingsService();
@@ -224,7 +227,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
 
   bool _isExpired(Map<String, dynamic> it) {
     final exp = _parseDt(it['expires_at']);
-    if (exp == null) return false; // eski kayıtlar null olabilir
+    if (exp == null) return false;
     return exp.isBefore(DateTime.now());
   }
 
@@ -289,17 +292,11 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           .update({
             'status': 'published',
             'updated_at': now.toIso8601String(),
-
-            // ✅ 30 gün kuralı
             'published_at': now.toIso8601String(),
             'expires_at': expires.toIso8601String(),
-
-            // ✅ admin review fields
             'admin_reviewed_at': now.toIso8601String(),
             'admin_archived': false,
             'admin_archived_at': null,
-
-            // ✅ doping reset (istersen)
             'boost_type': 'none',
             'boost_until': null,
           })
@@ -367,7 +364,6 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       final now = DateTime.now();
       final reason = reasonCtrl.text.trim();
 
-      // ✅ details MERGE (ezme yok)
       final oldDetails = _detailsOf(it);
       final newDetails = <String, dynamic>{
         ...oldDetails,
@@ -381,8 +377,6 @@ class _AdminPanelPageState extends State<AdminPanelPage>
             'status': 'rejected',
             'details': newDetails,
             'updated_at': now.toIso8601String(),
-
-            // ✅ admin review fields
             'admin_reviewed_at': now.toIso8601String(),
             'admin_archived': false,
             'admin_archived_at': null,
@@ -420,17 +414,11 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           .update({
             'status': 'pending',
             'updated_at': now.toIso8601String(),
-
-            // ✅ review reset
             'admin_reviewed_at': null,
             'admin_archived': false,
             'admin_archived_at': null,
-
-            // ✅ 30 gün alanlarını sıfırla
             'published_at': null,
             'expires_at': null,
-
-            // ✅ doping reset
             'boost_type': 'none',
             'boost_until': null,
           })
@@ -523,7 +511,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(AppUI.g12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -557,7 +545,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                           ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: AppUI.g12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -569,7 +557,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                           fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: AppUI.g10),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -594,8 +582,6 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                               ),
                             ),
                           ),
-
-                          // ✅ expires info on published
                           if (isPublished && exp != null)
                             _chip('Bitiş: ${_fmtDateShort(exp.toLocal())}'),
                           if (expired)
@@ -619,7 +605,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                             ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: AppUI.g10),
                       Text(
                         'ID: $id',
                         style: const TextStyle(
@@ -632,7 +618,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: AppUI.g12),
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -649,9 +635,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-
-            // ACTIONS
+            SizedBox(height: AppUI.g10),
             if (isPending) ...[
               Row(
                 children: [
@@ -672,7 +656,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                       label: const Text('Onayla'),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: AppUI.g10),
                   Expanded(
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -729,22 +713,22 @@ class _AdminPanelPageState extends State<AdminPanelPage>
     if (!_isAdmin) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(AppUI.g16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.lock_outline, size: 42, color: Colors.grey),
-              const SizedBox(height: 10),
+              SizedBox(height: AppUI.g10),
               const Text(
                 'Bu sayfa sadece admin içindir.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: AppUI.g10),
               Text(
                 'Eğer admin olman gerekiyorsa, Supabase profiles tablosunda kendi kullanıcı kaydında is_admin=true yap.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade700),
+                style: TextStyle(color: Colors.grey),
               ),
             ],
           ),
@@ -752,22 +736,16 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       );
     }
 
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return Center(child: Text('Hata: $_error'));
-    }
-    if (items.isEmpty) {
-      return const Center(child: Text('Boş.'));
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Text('Hata: $_error'));
+    if (items.isEmpty) return const Center(child: Text('Boş.'));
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(AppUI.g12),
         itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        separatorBuilder: (_, _) => SizedBox(height: AppUI.g10),
         itemBuilder: (_, i) => _cardItem(items[i]),
       ),
     );

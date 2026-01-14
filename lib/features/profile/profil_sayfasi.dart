@@ -1,3 +1,4 @@
+import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -11,7 +12,7 @@ class ProfilSayfasi extends StatefulWidget {
 }
 
 class _ProfilSayfasiState extends State<ProfilSayfasi> {
-  static const Color kTurkuaz = Color(0xFF00B8D4); // ✅ eklendi
+  static const Color kTurkuaz = Color(0xFF00B8D4);
 
   final supabase = Supabase.instance.client;
 
@@ -21,7 +22,7 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
   String _fullName = '';
   String _phone = '';
   String _city = '';
-  String _district = ''; // ✅ yeni
+  String _district = '';
   String _bio = '';
   String _email = '';
   String _avatarSignedUrl = '';
@@ -53,13 +54,13 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = '';
     });
 
     try {
-      // ✅ district eklendi
       final data = await supabase
           .from('profiles')
           .select('full_name, phone, city, district, bio, avatar_path')
@@ -120,16 +121,16 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
       backgroundColor: const Color(0xFFF7F7F9),
       appBar: AppBar(
         backgroundColor: kTurkuaz,
-        // ✅ turkuaz
         foregroundColor: Colors.white,
-        // ✅ yazılar/butonlar beyaz
         elevation: 0,
         centerTitle: true,
-        title: const Text(
+        title: Text(
           'Profil',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: AppUI.fs(context, 16),
+          ),
         ),
-        // ✅ alttaki çizgi turkuaz üstünde gereksiz durur; kaldırdım
       ),
       body: SafeArea(
         top: false,
@@ -138,12 +139,12 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
             : (_error.isNotEmpty)
             ? Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(AppUI.gap(context, 16)),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(_error, textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
+                      SizedBox(height: AppUI.gap(context, 12)),
                       ElevatedButton(
                         onPressed: _loadProfile,
                         child: const Text('Tekrar dene'),
@@ -159,7 +160,12 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                     const double maxW = 520;
                     return ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      padding: EdgeInsets.fromLTRB(
+                        AppUI.gap(context, 16),
+                        AppUI.gap(context, 16),
+                        AppUI.gap(context, 16),
+                        AppUI.gap(context, 24),
+                      ),
                       children: [
                         Center(
                           child: ConstrainedBox(
@@ -168,10 +174,14 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.all(16),
+                                  padding: EdgeInsets.all(
+                                    AppUI.gap(context, 16),
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
-                                    borderRadius: BorderRadius.circular(18),
+                                    borderRadius: BorderRadius.circular(
+                                      AppUI.r(context, 18),
+                                    ),
                                     border: Border.all(
                                       color: Colors.black12.withOpacity(.06),
                                     ),
@@ -179,18 +189,18 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                   child: Row(
                                     children: [
                                       CircleAvatar(
-                                        radius: 30,
+                                        radius: AppUI.r(context, 30),
                                         backgroundColor: Colors.grey.shade200,
                                         backgroundImage: avatarProvider,
                                         child: avatarProvider == null
-                                            ? const Icon(
+                                            ? Icon(
                                                 Icons.person,
-                                                size: 28,
+                                                size: AppUI.fs(context, 28),
                                                 color: Colors.grey,
                                               )
                                             : null,
                                       ),
-                                      const SizedBox(width: 14),
+                                      SizedBox(width: AppUI.gap(context, 14)),
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment:
@@ -202,12 +212,14 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                                   : _fullName,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 16,
+                                              style: TextStyle(
+                                                fontSize: AppUI.fs(context, 16),
                                                 fontWeight: FontWeight.w800,
                                               ),
                                             ),
-                                            const SizedBox(height: 4),
+                                            SizedBox(
+                                              height: AppUI.gap(context, 4),
+                                            ),
                                             Text(
                                               _email.isEmpty ? '-' : _email,
                                               maxLines: 1,
@@ -217,6 +229,7 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                                   .55,
                                                 ),
                                                 fontWeight: FontWeight.w500,
+                                                fontSize: AppUI.fs(context, 13),
                                               ),
                                             ),
                                           ],
@@ -225,40 +238,49 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                     ],
                                   ),
                                 ),
-                                const SizedBox(height: 12),
+                                SizedBox(height: AppUI.gap(context, 12)),
                                 _infoCard(
                                   icon: Icons.phone,
                                   label: 'Telefon',
                                   value: _phone,
                                 ),
-                                const SizedBox(height: 10),
+                                SizedBox(height: AppUI.gap(context, 10)),
                                 _infoCard(
                                   icon: Icons.location_on_outlined,
                                   label: 'Konum',
                                   value: locationText,
                                   maxLines: 2,
                                 ),
-                                const SizedBox(height: 10),
+                                SizedBox(height: AppUI.gap(context, 10)),
                                 _infoCard(
                                   icon: Icons.info_outline,
                                   label: 'Kısa bio',
                                   value: _bio,
                                   maxLines: 3,
                                 ),
-                                const SizedBox(height: 14),
+                                SizedBox(height: AppUI.gap(context, 14)),
                                 SizedBox(
                                   width: double.infinity,
-                                  height: 50,
+                                  height: AppUI.gap(context, 50),
                                   child: ElevatedButton.icon(
                                     onPressed: _goEdit,
                                     icon: const Icon(Icons.edit),
-                                    label: const Text('Profili Düzenle'),
+                                    label: Text(
+                                      'Profili Düzenle',
+                                      style: TextStyle(
+                                        fontSize: AppUI.fs(context, 14),
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(height: 10),
+                                SizedBox(height: AppUI.gap(context, 10)),
                                 Text(
                                   'Aşağı çekerek yenileyebilirsin.',
-                                  style: Theme.of(context).textTheme.bodySmall,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        fontSize: AppUI.fs(context, 12),
+                                      ),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -283,20 +305,27 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
     final v = value.trim().isEmpty ? '-' : value.trim();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppUI.gap(context, 14),
+        vertical: AppUI.gap(context, 12),
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 18)),
         border: Border.all(color: Colors.black12.withOpacity(.06)),
       ),
       child: Row(
         children: [
           CircleAvatar(
-            radius: 18,
+            radius: AppUI.r(context, 18),
             backgroundColor: Colors.grey.shade100,
-            child: Icon(icon, size: 18, color: Colors.black87),
+            child: Icon(
+              icon,
+              size: AppUI.fs(context, 18),
+              color: Colors.black87,
+            ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: AppUI.gap(context, 12)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -304,18 +333,18 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppUI.fs(context, 12),
                     color: Colors.black.withOpacity(.55),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 3),
+                SizedBox(height: AppUI.gap(context, 3)),
                 Text(
                   v,
                   maxLines: maxLines,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
+                  style: TextStyle(
+                    fontSize: AppUI.fs(context, 14),
                     fontWeight: FontWeight.w700,
                   ),
                 ),

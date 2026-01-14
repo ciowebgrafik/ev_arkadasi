@@ -1,8 +1,15 @@
 import 'dart:typed_data';
 
+import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+// -------------------------
+// ✅ (Opsiyonel) AdMob
+// google_mobile_ads ekleyince bunu açarsın.
+// import 'package:google_mobile_ads/google_mobile_ads.dart';
+// -------------------------
 
 class ProfilDuzenleSayfasi extends StatefulWidget {
   const ProfilDuzenleSayfasi({super.key});
@@ -23,10 +30,8 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   bool _loading = true;
   bool _saving = false;
 
-  // ✅ Yeni seçilen foto
   Uint8List? _avatarBytes;
 
-  // ✅ Eski kayıtlı foto (NetworkImage yok → Storage’dan indirip MemoryImage yapıyoruz)
   Uint8List? _existingAvatarBytes;
   String _existingAvatarPath = '';
   bool _loadingAvatar = false;
@@ -44,10 +49,33 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   List<Map<String, dynamic>> _cities = [];
   List<String> _districts = [];
 
+  // =========================
+  // ✅ REKLAM AYARLARI
+  // =========================
+  // Şimdilik false bırak: placeholder çıkar, proje patlamaz.
+  // AdMob kurunca true yaparsın.
+  final bool useRealAdmob = false;
+
+  // BannerAd? _bannerAd;
+  // bool _bannerLoaded = false;
+
+  // Android test banner unit id:
+  // ca-app-pub-3940256099942544/6300978111
+  // iOS test banner unit id:
+  // ca-app-pub-3940256099942544/2934735716
+  final String bannerAdUnitIdAndroidTest =
+      "ca-app-pub-3940256099942544/6300978111";
+  final String bannerAdUnitIdIosTest = "ca-app-pub-3940256099942544/2934735716";
+
   @override
   void initState() {
     super.initState();
     _initLoad();
+
+    // ✅ AdMob açınca burayı aktif edersin:
+    // if (useRealAdmob) {
+    //   _loadBanner();
+    // }
   }
 
   @override
@@ -55,8 +83,27 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     _adController.dispose();
     _telefonController.dispose();
     _bioController.dispose();
+
+    // _bannerAd?.dispose();
     super.dispose();
   }
+
+  // void _loadBanner() {
+  //   _bannerAd = BannerAd(
+  //     size: AdSize.banner,
+  //     adUnitId: bannerAdUnitIdAndroidTest, // iOS’ta platform check yaparsın
+  //     listener: BannerAdListener(
+  //       onAdLoaded: (ad) {
+  //         if (!mounted) return;
+  //         setState(() => _bannerLoaded = true);
+  //       },
+  //       onAdFailedToLoad: (ad, err) {
+  //         ad.dispose();
+  //       },
+  //     ),
+  //     request: const AdRequest(),
+  //   )..load();
+  // }
 
   void _snack(String msg) {
     if (!mounted) return;
@@ -69,8 +116,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     await _loadCities();
     await _profiliYukle();
   }
-
-  // ===================== DB LOADERS =====================
 
   Future<void> _loadCities() async {
     if (mounted) setState(() => _loadingCities = true);
@@ -140,10 +185,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     }
   }
 
-  // ===================== AVATAR LOAD (NO NETWORK IMAGE) =====================
-
   Future<void> _loadExistingAvatarBytesIfNeeded() async {
-    // Yeni foto seçildiyse eskiyi indirmeye gerek yok
     if (_avatarBytes != null) return;
 
     final path = _existingAvatarPath.trim();
@@ -155,18 +197,15 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
       final bytes = await supabase.storage.from('avatars').download(path);
       if (!mounted) return;
 
-      // Eğer bu arada kullanıcı yeni foto seçtiyse, eskiyi ezme
       if (_avatarBytes == null) {
         setState(() => _existingAvatarBytes = bytes);
       }
     } catch (_) {
-      // Sessiz geç: avatar yoksa icon kalsın
+      // avatar yoksa sessiz geç
     } finally {
       if (mounted) setState(() => _loadingAvatar = false);
     }
   }
-
-  // ===================== PROFILE LOAD =====================
 
   Future<void> _profiliYukle() async {
     final user = supabase.auth.currentUser;
@@ -175,7 +214,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     if (mounted) {
       setState(() {
         _loading = true;
-        _existingAvatarBytes = null; // yenilemede tekrar indir
+        _existingAvatarBytes = null;
         _existingAvatarPath = '';
       });
     }
@@ -196,7 +235,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
       _existingAvatarPath = (data?['avatar_path'] ?? '').toString();
 
-      // ✅ City eşle
       if (_initialCityName.isNotEmpty && _cities.isNotEmpty) {
         final row = _cities.firstWhere(
           (x) =>
@@ -226,7 +264,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
         }
       }
 
-      // ✅ Eski avatarı Storage’dan indir (NetworkImage yok)
       await _loadExistingAvatarBytesIfNeeded();
     } catch (e) {
       if (!mounted) return;
@@ -235,8 +272,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
       if (mounted) setState(() => _loading = false);
     }
   }
-
-  // ===================== PHOTO =====================
 
   Future<void> _fotoSec() async {
     final picker = ImagePicker();
@@ -251,9 +286,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     final bytes = await picked.readAsBytes();
     if (!mounted) return;
 
-    setState(() {
-      _avatarBytes = bytes; // ✅ yeni seçilen öncelikli
-    });
+    setState(() => _avatarBytes = bytes);
   }
 
   Future<String?> _fotoYuklePath(String uid) async {
@@ -275,8 +308,6 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
     return path;
   }
-
-  // ===================== SAVE =====================
 
   Future<void> _kaydet() async {
     final user = supabase.auth.currentUser;
@@ -322,13 +353,52 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     }
   }
 
-  // ===================== UI =====================
+  // =====================
+  // ✅ REKLAM WIDGET
+  // =====================
+  Widget _adBanner(BuildContext context) {
+    // 1) Şimdilik placeholder: proje %100 çalışır
+    if (!useRealAdmob) {
+      return Container(
+        margin: EdgeInsets.only(top: AppUI.gap(context, 12)),
+        height: AppUI.gap(context, 60),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(AppUI.r(context, 12)),
+          border: Border.all(color: Colors.black.withOpacity(0.08)),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          "REKLAM ALANI (Banner)",
+          style: TextStyle(
+            fontSize: AppUI.fs(context, 12),
+            fontWeight: FontWeight.w700,
+            color: Colors.black54,
+          ),
+        ),
+      );
+    }
+
+    // 2) AdMob açınca burayı kullanırsın:
+    // if (_bannerAd == null || !_bannerLoaded) {
+    //   return SizedBox(height: AppUI.gap(context, 60));
+    // }
+    // return Container(
+    //   margin: EdgeInsets.only(top: AppUI.gap(context, 12)),
+    //   alignment: Alignment.center,
+    //   width: _bannerAd!.size.width.toDouble(),
+    //   height: _bannerAd!.size.height.toDouble(),
+    //   child: AdWidget(ad: _bannerAd!),
+    // );
+
+    return SizedBox(height: AppUI.gap(context, 60));
+  }
 
   Widget _cityDropdown() {
     if (_loadingCities) {
-      return const SizedBox(
-        height: 56,
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      return SizedBox(
+        height: AppUI.gap(context, 56),
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
 
@@ -373,9 +443,13 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
               await _loadDistrictsOfCityId(id);
             },
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         labelText: 'Şehir',
-        border: OutlineInputBorder(),
+        border: const OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: AppUI.gap(context, 12),
+          vertical: AppUI.gap(context, 14),
+        ),
       ),
     );
   }
@@ -384,9 +458,9 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     final disabled = _saving || _selectedCityId == null;
 
     if (_loadingDistricts) {
-      return const SizedBox(
-        height: 56,
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      return SizedBox(
+        height: AppUI.gap(context, 56),
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
 
@@ -414,19 +488,21 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
         hintText: (_selectedCityId == null)
             ? 'Önce şehir seç'
             : (_districts.isEmpty ? 'İlçe bulunamadı' : null),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: AppUI.gap(context, 12),
+          vertical: AppUI.gap(context, 14),
+        ),
       ),
     );
   }
 
   Widget _buildBody(BuildContext context) {
-    // ✅ Öncelik: yeni seçilen foto -> eski indirilen foto -> icon
     final ImageProvider? bg = (_avatarBytes != null)
         ? MemoryImage(_avatarBytes!)
         : (_existingAvatarBytes != null)
         ? MemoryImage(_existingAvatarBytes!)
         : null;
 
-    // ✅ İlan oluştur sayfası gibi: ListView + viewInsets.bottom padding
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return GestureDetector(
@@ -438,7 +514,12 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
             absorbing: _saving,
             child: ListView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+              padding: EdgeInsets.fromLTRB(
+                AppUI.gap(context, 16),
+                AppUI.gap(context, 16),
+                AppUI.gap(context, 16),
+                AppUI.gap(context, 16) + bottomInset,
+              ),
               children: [
                 Center(
                   child: GestureDetector(
@@ -447,11 +528,14 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
                       alignment: Alignment.center,
                       children: [
                         CircleAvatar(
-                          radius: 54,
+                          radius: AppUI.r(context, 54),
                           backgroundColor: Colors.grey.shade200,
                           backgroundImage: bg,
                           child: bg == null
-                              ? const Icon(Icons.camera_alt, size: 32)
+                              ? Icon(
+                                  Icons.camera_alt,
+                                  size: AppUI.fs(context, 32),
+                                )
                               : null,
                         ),
                         if (_loadingAvatar)
@@ -470,56 +554,80 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: AppUI.gap(context, 20)),
                 TextField(
                   controller: _adController,
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Ad Soyad',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: AppUI.gap(context, 12),
+                      vertical: AppUI.gap(context, 14),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppUI.gap(context, 12)),
                 TextField(
                   controller: _telefonController,
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Telefon',
-                    border: OutlineInputBorder(),
-                  ),
                   keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Telefon',
+                    border: const OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: AppUI.gap(context, 12),
+                      vertical: AppUI.gap(context, 14),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: AppUI.gap(context, 12)),
                 _cityDropdown(),
-                const SizedBox(height: 12),
+                SizedBox(height: AppUI.gap(context, 12)),
                 _districtDropdown(),
-                const SizedBox(height: 12),
+                SizedBox(height: AppUI.gap(context, 12)),
                 TextField(
                   controller: _bioController,
-                  decoration: const InputDecoration(
-                    labelText: 'Hakkımda',
-                    border: OutlineInputBorder(),
-                  ),
                   maxLines: 3,
                   textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    labelText: 'Hakkımda',
+                    border: const OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: AppUI.gap(context, 12),
+                      vertical: AppUI.gap(context, 14),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 22),
+                SizedBox(height: AppUI.gap(context, 22)),
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
+                  height: AppUI.gap(context, 52),
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kTurkuaz,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(
+                          AppUI.r(context, 12),
+                        ),
                       ),
                     ),
                     onPressed: _saving ? null : _kaydet,
-                    child: Text(_saving ? 'Kaydediliyor...' : 'Kaydet'),
+                    child: Text(
+                      _saving ? 'Kaydediliyor...' : 'Kaydet',
+                      style: TextStyle(
+                        fontSize: AppUI.fs(context, 15),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 24),
+
+                // ✅ REKLAM ALANI (sayfanın altında)
+                _adBanner(context),
+
+                SizedBox(height: AppUI.gap(context, 24)),
               ],
             ),
           ),
@@ -541,25 +649,22 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✅ İlan oluştur ile aynı klavye davranışı
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
-        title: const Text(
+        title: Text(
           'Profil Düzenle',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: AppUI.fs(context, 16),
+          ),
         ),
         centerTitle: true,
         actions: [
           IconButton(
             tooltip: 'Yenile',
-            onPressed: _saving
-                ? null
-                : () async {
-                    // Yenile: yeni seçilen foto kalsın mı? (kalsın)
-                    await _initLoad();
-                  },
+            onPressed: _saving ? null : () async => _initLoad(),
             icon: const Icon(Icons.refresh),
           ),
         ],

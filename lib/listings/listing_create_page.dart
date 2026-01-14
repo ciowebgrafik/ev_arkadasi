@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -542,9 +543,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       final remaining = _remainingPickCount();
       if (remaining <= 0) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('En fazla 10 fotoğraf olabilir.')),
-        );
+        _snack('En fazla 10 fotoğraf olabilir.');
         return;
       }
 
@@ -564,9 +563,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
       setState(() => _pickedImages.addAll(newOnes));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Foto seçilemedi: $e')));
+      _snack('Foto seçilemedi: $e');
     }
   }
 
@@ -632,8 +629,10 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     };
   }
 
-  void _snack(String msg) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
 
   // ===========================
   // ✅ STATUS HELPERS (Admin onaylı akış)
@@ -905,15 +904,29 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     }
   }
 
+  // ===========================
+  // ✅ UI helpers (AppUI)
+  // ===========================
   Widget _card(String title, List<Widget> children) {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppUI.r(context, 16)),
+        side: BorderSide(color: Colors.black12.withOpacity(.06)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(AppUI.gap(context, 12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: AppUI.fs(context, 15),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            SizedBox(height: AppUI.gap(context, 12)),
             ...children,
           ],
         ),
@@ -930,13 +943,14 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         'Silmek için foto üstündeki (X) tuşuna bas.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      const SizedBox(height: 10),
+      SizedBox(height: AppUI.gap(context, 10)),
       SizedBox(
-        height: 84,
+        height: AppUI.gap(context, 84),
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: _existingImagePaths.length,
-          separatorBuilder: (context, index) => const SizedBox(width: 10),
+          separatorBuilder: (context, index) =>
+              SizedBox(width: AppUI.gap(context, 10)),
           itemBuilder: (context, i) {
             final path = _existingImagePaths[i];
             final url = _existingUrlCache[path];
@@ -944,10 +958,10 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             return Stack(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppUI.r(context, 12)),
                   child: Container(
-                    width: 84,
-                    height: 84,
+                    width: AppUI.gap(context, 84),
+                    height: AppUI.gap(context, 84),
                     color: Colors.grey.shade200,
                     child: (url != null && url.isNotEmpty)
                         ? Image.network(url, fit: BoxFit.cover)
@@ -955,19 +969,21 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                   ),
                 ),
                 Positioned(
-                  top: 4,
-                  right: 4,
+                  top: AppUI.gap(context, 4),
+                  right: AppUI.gap(context, 4),
                   child: InkWell(
                     onTap: () => _removeExistingPath(path),
                     child: Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: EdgeInsets.all(AppUI.gap(context, 4)),
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(999),
+                        borderRadius: BorderRadius.circular(
+                          AppUI.r(context, 999),
+                        ),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.close,
-                        size: 16,
+                        size: AppUI.fs(context, 16),
                         color: Colors.white,
                       ),
                     ),
@@ -999,7 +1015,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: AppUI.gap(context, 10)),
           if (_pickedImages.isNotEmpty)
             OutlinedButton(
               onPressed: _loading ? null : () => setState(_pickedImages.clear),
@@ -1007,43 +1023,46 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             ),
         ],
       ),
-      const SizedBox(height: 10),
+      SizedBox(height: AppUI.gap(context, 10)),
       if (_pickedImages.isNotEmpty)
         SizedBox(
-          height: 84,
+          height: AppUI.gap(context, 84),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: _pickedImages.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 10),
+            separatorBuilder: (context, index) =>
+                SizedBox(width: AppUI.gap(context, 10)),
             itemBuilder: (context, i) {
               final img = _pickedImages[i];
 
               return Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppUI.r(context, 12)),
                     child: Image.memory(
                       img.bytes,
-                      width: 84,
-                      height: 84,
+                      width: AppUI.gap(context, 84),
+                      height: AppUI.gap(context, 84),
                       fit: BoxFit.cover,
                       filterQuality: FilterQuality.low,
                     ),
                   ),
                   Positioned(
-                    top: 4,
-                    right: 4,
+                    top: AppUI.gap(context, 4),
+                    right: AppUI.gap(context, 4),
                     child: InkWell(
                       onTap: () => _removeNewImageAt(i),
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: EdgeInsets.all(AppUI.gap(context, 4)),
                         decoration: BoxDecoration(
                           color: Colors.black.withOpacity(0.55),
-                          borderRadius: BorderRadius.circular(999),
+                          borderRadius: BorderRadius.circular(
+                            AppUI.r(context, 999),
+                          ),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.close,
-                          size: 16,
+                          size: AppUI.fs(context, 16),
                           color: Colors.white,
                         ),
                       ),
@@ -1054,7 +1073,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             },
           ),
         ),
-      const SizedBox(height: 6),
+      SizedBox(height: AppUI.gap(context, 6)),
       Text(
         'Toplam foto: $totalCount/10',
         style: Theme.of(context).textTheme.bodySmall,
@@ -1074,7 +1093,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             .toList(),
         onChanged: (v) => setState(() => _photoMode = v ?? _photoMode),
       ),
-      const SizedBox(height: 10),
+      SizedBox(height: AppUI.gap(context, 10)),
       CheckboxListTile(
         value: _deleteRemovedFromStorage,
         onChanged: (v) =>
@@ -1100,7 +1119,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             ? null
             : (v) => setState(() => _boostPlan = v ?? BoostPlan.none),
       ),
-      const SizedBox(height: 8),
+      SizedBox(height: AppUI.gap(context, 8)),
       Text(
         'Not: Şimdilik plan bilgisi kaydediliyor. (Ödeme/öne çıkarma sonra.)',
         style: Theme.of(context).textTheme.bodySmall,
@@ -1147,7 +1166,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         ],
         onChanged: (v) => setState(() => _prefGender = v ?? 'any'),
       ),
-      const SizedBox(height: 10),
+      SizedBox(height: AppUI.gap(context, 10)),
       CheckboxListTile(
         value: _prefStudent,
         onChanged: (v) => setState(() => _prefStudent = v ?? false),
@@ -1167,7 +1186,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
     return _card('Konum', [
       if (_locError != null) ...[
         Text(_locError!, style: const TextStyle(color: Colors.red)),
-        const SizedBox(height: 8),
+        SizedBox(height: AppUI.gap(context, 8)),
       ],
       DropdownButtonFormField<int>(
         value: _selectedCityId,
@@ -1180,7 +1199,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             ? null
             : (v) => _onCityChanged(v),
       ),
-      const SizedBox(height: 10),
+      SizedBox(height: AppUI.gap(context, 10)),
       DropdownButtonFormField<int>(
         value: _selectedDistrictId,
         decoration: InputDecoration(
@@ -1194,43 +1213,70 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
             ? null
             : (v) => _onDistrictChanged(v),
       ),
-      const SizedBox(height: 8),
+      SizedBox(height: AppUI.gap(context, 8)),
       if (_loadingCities || _loadingDistricts)
         const LinearProgressIndicator(minHeight: 2),
     ]);
   }
 
-  // ✅ BUTONLAR sabit altta (klavye stabil)
+  // ✅ BUTONLAR sabit altta (klavye stabil) - AppUI
   Widget _bottomButtons() {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        padding: EdgeInsets.fromLTRB(
+          AppUI.gap(context, 12),
+          AppUI.gap(context, 8),
+          AppUI.gap(context, 12),
+          AppUI.gap(context, 12),
+        ),
         child: Row(
           children: [
             Expanded(
-              child: OutlinedButton(
-                onPressed: _loading ? null : () => _save(publish: false),
-                child: _loading
-                    ? const Text('...')
-                    : const Text('Taslak Kaydet'),
+              child: SizedBox(
+                height: AppUI.gap(context, 46),
+                child: OutlinedButton(
+                  onPressed: _loading ? null : () => _save(publish: false),
+                  child: _loading
+                      ? const Text('...')
+                      : const Text('Taslak Kaydet'),
+                ),
               ),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: AppUI.gap(context, 10)),
             Expanded(
-              child: ElevatedButton(
-                onPressed: _loading ? null : () => _save(publish: true),
-                child: _loading
-                    ? const Text('...')
-                    : Text(
-                        widget.isEdit
-                            ? 'Güncelle + Onaya Gönder'
-                            : 'Onaya Gönder',
-                      ),
+              child: SizedBox(
+                height: AppUI.gap(context, 46),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kTurkuaz,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _loading ? null : () => _save(publish: true),
+                  child: _loading
+                      ? const Text('...')
+                      : Text(
+                          widget.isEdit
+                              ? 'Güncelle + Onaya Gönder'
+                              : 'Onaya Gönder',
+                        ),
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  InputDecoration _dec(String label, {String? hint}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      border: const OutlineInputBorder(),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: AppUI.gap(context, 12),
+        vertical: AppUI.gap(context, 14),
       ),
     );
   }
@@ -1247,14 +1293,26 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
         ? 'Telefon: Profilinde yok (Profilim’den ekleyebilirsin)'
         : 'Telefon (profil): ${_myPhone!}';
 
+    // ✅ klavye açılınca alttan padding (scroll + bottom bar stabil)
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: kTurkuaz,
         foregroundColor: Colors.white,
-        title: Text(widget.isEdit ? 'İlanı Düzenle' : 'İlan Yayınla'),
+        title: Text(
+          widget.isEdit ? 'İlanı Düzenle' : 'İlan Yayınla',
+          style: TextStyle(
+            fontSize: AppUI.fs(context, 16),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
-      bottomNavigationBar: _bottomButtons(),
+      bottomNavigationBar: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset > 0 ? 0 : 0),
+        child: _bottomButtons(),
+      ),
       body: SafeArea(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -1265,15 +1323,18 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               slivers: [
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  padding: EdgeInsets.fromLTRB(
+                    AppUI.gap(context, 12),
+                    AppUI.gap(context, 12),
+                    AppUI.gap(context, 12),
+                    AppUI.gap(context, 12),
+                  ),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       _card('Temel Bilgiler', [
                         DropdownButtonFormField<ListingType>(
                           value: _type,
-                          decoration: const InputDecoration(
-                            labelText: 'İlan Türü',
-                          ),
+                          decoration: _dec('İlan Türü'),
                           items: typeItems
                               .map(
                                 (t) => DropdownMenuItem(
@@ -1297,21 +1358,17 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                                   });
                                 },
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: AppUI.gap(context, 10)),
                         TextField(
                           controller: _titleCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Başlık *',
-                          ),
+                          decoration: _dec('Başlık *'),
                           textInputAction: TextInputAction.next,
                         ),
                         if (_type == ListingType.item) ...[
-                          const SizedBox(height: 10),
+                          SizedBox(height: AppUI.gap(context, 10)),
                           DropdownButtonFormField<ItemCategory>(
                             value: _itemCategory,
-                            decoration: const InputDecoration(
-                              labelText: 'Kategori',
-                            ),
+                            decoration: _dec('Kategori'),
                             items: ItemCategory.values
                                 .map(
                                   (c) => DropdownMenuItem(
@@ -1325,16 +1382,14 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 10),
+                        SizedBox(height: AppUI.gap(context, 10)),
                         TextField(
                           controller: _descCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Açıklama',
-                          ),
+                          decoration: _dec('Açıklama'),
                           maxLines: 4,
                           textInputAction: TextInputAction.newline,
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: AppUI.gap(context, 10)),
                         Text(
                           phoneText,
                           style: Theme.of(context).textTheme.bodySmall,
@@ -1351,18 +1406,17 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                         TextField(
                           controller: _priceCtrl,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Fiyat (Tek Sefer) *',
+                          decoration: _dec(
+                            'Fiyat (Tek Sefer) *',
+                            hint: 'Örn: 1500',
                           ),
                           textInputAction: TextInputAction.next,
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: AppUI.gap(context, 10)),
                         if (_type == ListingType.roommate)
                           DropdownButtonFormField<PricePeriod>(
                             value: _pricePeriod,
-                            decoration: const InputDecoration(
-                              labelText: 'Fiyat Periyodu',
-                            ),
+                            decoration: _dec('Fiyat Periyodu'),
                             items: PricePeriod.values
                                 .map(
                                   (p) => DropdownMenuItem(
@@ -1375,7 +1429,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                               () => _pricePeriod = v ?? _pricePeriod,
                             ),
                           ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: AppUI.gap(context, 10)),
                         if (_type == ListingType.roommate)
                           SwitchListTile(
                             value: _billsIncluded,
@@ -1402,9 +1456,7 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                         if (_type == ListingType.roommate)
                           TextField(
                             controller: _roomCountCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Ev Oda Sayısı (örn: 2+1)',
-                            ),
+                            decoration: _dec('Ev Oda Sayısı (örn: 2+1)'),
                             textInputAction: TextInputAction.done,
                           ),
                         if (_type != ListingType.roommate)
@@ -1415,7 +1467,8 @@ class _ListingCreatePageState extends State<ListingCreatePage> {
                       _rulesSection(),
                       _preferencesSection(),
 
-                      const SizedBox(height: 24),
+                      SizedBox(height: AppUI.gap(context, 24)),
+                      SizedBox(height: AppUI.gap(context, 10)),
                     ]),
                   ),
                 ),

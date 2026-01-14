@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/widgets/app_ui.dart';
 import '../features/auth/auth_gate.dart';
 import '../features/profile/profil_sayfasi.dart';
 import 'admin_panel_page.dart';
@@ -94,6 +95,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _snack(String msg) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
@@ -261,21 +263,30 @@ class _HomePageState extends State<HomePage> {
       child: SafeArea(
         child: Column(
           children: [
-            const ListTile(
+            ListTile(
               title: Text(
                 'Menü',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: AppUI.fs(context, 16),
+                ),
               ),
             ),
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.home_outlined),
-              title: const Text('Ana Sayfa'),
+              title: Text(
+                'Ana Sayfa',
+                style: TextStyle(fontSize: AppUI.fs(context, 14)),
+              ),
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
               leading: const Icon(Icons.add_circle_outline),
-              title: const Text('İlan Yayınla'),
+              title: Text(
+                'İlan Yayınla',
+                style: TextStyle(fontSize: AppUI.fs(context, 14)),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 Future.microtask(_openCreateListing);
@@ -283,7 +294,10 @@ class _HomePageState extends State<HomePage> {
             ),
             ListTile(
               leading: const Icon(Icons.people_alt_outlined),
-              title: const Text('Ev Arkadaşı İlanları'),
+              title: Text(
+                'Ev Arkadaşı İlanları',
+                style: TextStyle(fontSize: AppUI.fs(context, 14)),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 Future.microtask(_openRoommateListings);
@@ -291,7 +305,10 @@ class _HomePageState extends State<HomePage> {
             ),
             ListTile(
               leading: const Icon(Icons.chair_alt_outlined),
-              title: const Text('Ev Eşyaları İlanları'),
+              title: Text(
+                'Ev Eşyaları İlanları',
+                style: TextStyle(fontSize: AppUI.fs(context, 14)),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 Future.microtask(_openItemListings);
@@ -299,7 +316,10 @@ class _HomePageState extends State<HomePage> {
             ),
             ListTile(
               leading: const Icon(Icons.list_alt_outlined),
-              title: const Text('Tüm İlanlar'),
+              title: Text(
+                'Tüm İlanlar',
+                style: TextStyle(fontSize: AppUI.fs(context, 14)),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 Future.microtask(_openListingsAll);
@@ -307,7 +327,10 @@ class _HomePageState extends State<HomePage> {
             ),
             ListTile(
               leading: const Icon(Icons.inventory_2_outlined),
-              title: const Text('İlanlarım'),
+              title: Text(
+                'İlanlarım',
+                style: TextStyle(fontSize: AppUI.fs(context, 14)),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 Future.microtask(_openMyListings);
@@ -319,7 +342,10 @@ class _HomePageState extends State<HomePage> {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.admin_panel_settings_outlined),
-                title: const Text('Admin Panel'),
+                title: Text(
+                  'Admin Panel',
+                  style: TextStyle(fontSize: AppUI.fs(context, 14)),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   Future.microtask(_openAdminPanel);
@@ -330,13 +356,17 @@ class _HomePageState extends State<HomePage> {
             const Spacer(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.redAccent),
-              title: const Text(
+              title: Text(
                 'Çıkış',
-                style: TextStyle(color: Colors.redAccent),
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: AppUI.fs(context, 14),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               onTap: _signOut,
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppUI.gap(context, 8)),
           ],
         ),
       ),
@@ -356,7 +386,7 @@ class _HomePageState extends State<HomePage> {
       alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
       child: SizedBox(
         width: width,
-        height: 56,
+        height: AppUI.gap(context, 56),
         child: OutlinedButton(
           onPressed: onTap,
           style: OutlinedButton.styleFrom(
@@ -364,19 +394,18 @@ class _HomePageState extends State<HomePage> {
             foregroundColor: Colors.black87,
             side: const BorderSide(color: kTurkuaz, width: 1.6),
             shape: const StadiumBorder(),
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+            padding: EdgeInsets.symmetric(horizontal: AppUI.gap(context, 18)),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              Icon(icon, size: 20, color: kTurkuaz),
-              const SizedBox(width: 10),
+              Icon(icon, size: AppUI.fs(context, 20), color: kTurkuaz),
+              SizedBox(width: AppUI.gap(context, 10)),
               Expanded(
                 child: Text(
                   text,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
+                  style: TextStyle(
+                    fontSize: AppUI.fs(context, 16),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -393,23 +422,29 @@ class _HomePageState extends State<HomePage> {
       alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         width: width,
-        height: 110,
+        height: AppUI.gap(context, 110),
         decoration: const ShapeDecoration(
           color: Colors.white,
           shape: StadiumBorder(side: BorderSide(color: kTurkuaz, width: 1.6)),
         ),
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 'Google Reklamları',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                style: TextStyle(
+                  fontSize: AppUI.fs(context, 16),
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-              SizedBox(height: 6),
+              SizedBox(height: AppUI.gap(context, 6)),
               Text(
                 'Reklam alanı (Banner)',
-                style: TextStyle(fontSize: 12, color: Colors.black54),
+                style: TextStyle(
+                  fontSize: AppUI.fs(context, 12),
+                  color: Colors.black54,
+                ),
               ),
             ],
           ),
@@ -440,25 +475,32 @@ class _HomePageState extends State<HomePage> {
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Ev Arkadaşım',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontSize: AppUI.fs(context, 18),
+            fontWeight: FontWeight.w700,
+          ),
         ),
         actions: [
           GestureDetector(
             onTap: _openProfile,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppUI.gap(context, 8)),
               child: CircleAvatar(
-                radius: 16,
+                radius: AppUI.r(context, 16),
                 backgroundColor: Colors.white.withAlpha((0.25 * 255).round()),
                 backgroundImage: avatarUrl != null
                     ? NetworkImage(avatarUrl!)
                     : null,
                 child: avatarUrl == null
-                    ? const Icon(Icons.person, size: 18, color: Colors.white)
+                    ? Icon(
+                        Icons.person,
+                        size: AppUI.fs(context, 18),
+                        color: Colors.white,
+                      )
                     : null,
               ),
             ),
@@ -491,22 +533,25 @@ class _HomePageState extends State<HomePage> {
               const PopupMenuItem(value: 'logout', child: Text('Çıkış')),
             ],
           ),
-          const SizedBox(width: 6),
+          SizedBox(width: AppUI.gap(context, 6)),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _loadMe,
         child: _loading
             ? ListView(
-                children: const [
-                  SizedBox(height: 220),
-                  Center(child: CircularProgressIndicator()),
+                children: [
+                  SizedBox(height: AppUI.gap(context, 220)),
+                  const Center(child: CircularProgressIndicator()),
                 ],
               )
             : ListView(
-                padding: const EdgeInsets.only(top: 16, bottom: 16),
+                padding: EdgeInsets.only(
+                  top: AppUI.gap(context, 16),
+                  bottom: AppUI.gap(context, 16),
+                ),
                 children: [
-                  const SizedBox(height: 22),
+                  SizedBox(height: AppUI.gap(context, 22)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -514,7 +559,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.add_circle_outline,
                     onTap: _openCreateListing,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -522,7 +567,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.people_alt_outlined,
                     onTap: _openRoommateListings,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -530,7 +575,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.chair_alt_outlined,
                     onTap: _openItemListings,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -538,7 +583,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.search_outlined,
                     onTap: _openFindBestRoommate,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -546,7 +591,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.local_shipping_outlined,
                     onTap: _openMovingServices,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -554,7 +599,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.handyman_outlined,
                     onTap: _openRepair,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -562,7 +607,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.storefront_outlined,
                     onTap: _openNearbyTrades,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -570,7 +615,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.cleaning_services_outlined,
                     onTap: _openCleaning,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -578,7 +623,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.pets_outlined,
                     onTap: _openPetAdoption,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
@@ -586,13 +631,17 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.work_outline,
                     onTap: _openDailyJobs,
                   ),
-                  const SizedBox(height: 18),
+                  SizedBox(height: AppUI.gap(context, 18)),
                   _adSlot(width: safeWidth, alignRight: false),
-                  const SizedBox(height: 18),
+                  SizedBox(height: AppUI.gap(context, 18)),
                   Center(
                     child: Text(
                       'Aşağı çekerek yenileyebilirsin.',
-                      style: TextStyle(color: Colors.grey.shade700),
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: AppUI.fs(context, 12),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],

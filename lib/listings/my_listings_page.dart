@@ -1,6 +1,7 @@
+import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 
-import 'doping_page.dart'; // ✅ Doping ekranı
+import 'doping_page.dart';
 import 'listing_create_page.dart';
 import 'listing_enums.dart';
 import 'listings_service.dart';
@@ -168,16 +169,11 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Onaya gönderildi ✅')));
-
+      _snack('Onaya gönderildi ✅');
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Hata: $e')));
+      _snack('Hata: $e');
     }
   }
 
@@ -190,26 +186,15 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
     final status = (listing['status'] ?? '').toString();
     if (!_isPublished(status)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('İlanı öne çıkarmak için ilan yayında olmalı.'),
-        ),
-      );
+      _snack('İlanı öne çıkarmak için ilan yayında olmalı.');
       return;
     }
 
     // ✅ ekstra: süresi geçmişse de öne çıkarma kapalı
     if (_isExpired(listing)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bu ilan süresi dolmuş. Yeniden onaya gönder.'),
-        ),
-      );
+      _snack('Bu ilan süresi dolmuş. Yeniden onaya gönder.');
       return;
     }
-
-    // (İstersen burada “loading” göstermek için set edebilirsin)
-    // setState(() => _featureLoadingById[id] = true);
 
     final changed = await Navigator.push(
       context,
@@ -222,8 +207,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
     );
 
     if (!mounted) return;
-    // setState(() => _featureLoadingById[id] = false);
-
     if (changed == true) await _load();
   }
 
@@ -238,16 +221,12 @@ class _MyListingsPageState extends State<MyListingsPage> {
     final status = (listing['status'] ?? '').toString();
 
     if (_isRemovedStatus(status)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bu ilan zaten kaldırılmış.')),
-      );
+      _snack('Bu ilan zaten kaldırılmış.');
       return;
     }
 
     if (!_isPublished(status)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sadece yayındaki ilan kaldırılabilir.')),
-      );
+      _snack('Sadece yayındaki ilan kaldırılabilir.');
       return;
     }
 
@@ -269,16 +248,11 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('İlan yayından kaldırıldı ✅')),
-      );
-
+      _snack('İlan yayından kaldırıldı ✅');
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
+      _snack('Kaldırılamadı: $e');
     } finally {
       if (mounted) setState(() => _removeLoadingById[id] = false);
     }
@@ -366,8 +340,8 @@ class _MyListingsPageState extends State<MyListingsPage> {
     if (color == Colors.transparent) return const SizedBox.shrink();
 
     return Container(
-      width: 26,
-      height: 26,
+      width: AppUI.gap(context, 26),
+      height: AppUI.gap(context, 26),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.90),
         shape: BoxShape.circle,
@@ -380,7 +354,11 @@ class _MyListingsPageState extends State<MyListingsPage> {
         ],
       ),
       alignment: Alignment.center,
-      child: Icon(Icons.star_rounded, size: 18, color: color),
+      child: Icon(
+        Icons.star_rounded,
+        size: AppUI.fs(context, 18),
+        color: color,
+      ),
     );
   }
 
@@ -396,9 +374,9 @@ class _MyListingsPageState extends State<MyListingsPage> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(AppUI.gap(context, 12)),
         itemCount: list.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        separatorBuilder: (_, _) => SizedBox(height: AppUI.gap(context, 10)),
         itemBuilder: (context, i) {
           final l = list[i];
           final id = (l['id'] ?? '').toString();
@@ -438,18 +416,25 @@ class _MyListingsPageState extends State<MyListingsPage> {
           final expired = _isExpired(l);
 
           return Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppUI.r(context, 14)),
+              side: BorderSide(color: Colors.grey.shade200),
+            ),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(AppUI.gap(context, 12)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(
+                          AppUI.r(context, 12),
+                        ),
                         child: SizedBox(
-                          width: 72,
-                          height: 72,
+                          width: AppUI.gap(context, 72),
+                          height: AppUI.gap(context, 72),
                           child: Stack(
                             children: [
                               Positioned.fill(
@@ -463,66 +448,70 @@ class _MyListingsPageState extends State<MyListingsPage> {
                                 ),
                               ),
                               Positioned(
-                                left: 6,
-                                top: 6,
+                                left: AppUI.gap(context, 6),
+                                top: AppUI.gap(context, 6),
                                 child: _boostBadge(l),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: AppUI.gap(context, 12)),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               title.isEmpty ? '(Başlıksız)' : title,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
+                              style: TextStyle(
+                                fontSize: AppUI.fs(context, 16),
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: AppUI.gap(context, 8)),
                             Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
+                              spacing: AppUI.gap(context, 8),
+                              runSpacing: AppUI.gap(context, 8),
                               children: [
                                 _chip(type.label),
                                 if (loc.isNotEmpty) _chip(loc),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: AppUI.gap(context, 10),
+                                    vertical: AppUI.gap(context, 6),
                                   ),
                                   decoration: BoxDecoration(
                                     color: _statusBg(status),
-                                    borderRadius: BorderRadius.circular(999),
+                                    borderRadius: BorderRadius.circular(
+                                      AppUI.r(context, 999),
+                                    ),
                                   ),
                                   child: Text(
                                     _statusLabel(status),
                                     style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
+                                      fontSize: AppUI.fs(context, 12),
+                                      fontWeight: FontWeight.w800,
                                       color: _statusFg(status),
                                     ),
                                   ),
                                 ),
                                 if (published && expired)
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: AppUI.gap(context, 10),
+                                      vertical: AppUI.gap(context, 6),
                                     ),
                                     decoration: BoxDecoration(
                                       color: Colors.red.shade50,
-                                      borderRadius: BorderRadius.circular(999),
+                                      borderRadius: BorderRadius.circular(
+                                        AppUI.r(context, 999),
+                                      ),
                                     ),
                                     child: Text(
                                       'Süresi doldu',
                                       style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
+                                        fontSize: AppUI.fs(context, 12),
+                                        fontWeight: FontWeight.w800,
                                         color: Colors.red.shade800,
                                       ),
                                     ),
@@ -534,8 +523,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-
+                  SizedBox(height: AppUI.gap(context, 12)),
                   Row(
                     children: [
                       Expanded(
@@ -545,7 +533,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
                           label: const Text('Düzenle'),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      SizedBox(width: AppUI.gap(context, 10)),
                       Expanded(
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
@@ -561,21 +549,21 @@ class _MyListingsPageState extends State<MyListingsPage> {
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 10),
-
+                  SizedBox(height: AppUI.gap(context, 10)),
                   SizedBox(
                     width: double.infinity,
-                    height: 46,
+                    height: AppUI.gap(context, 46),
                     child: OutlinedButton.icon(
                       onPressed: (!published || removed || expired || featuring)
                           ? null
                           : () => _featureListing(l),
                       icon: featuring
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                          ? SizedBox(
+                              width: AppUI.gap(context, 18),
+                              height: AppUI.gap(context, 18),
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
                             )
                           : const Icon(Icons.trending_up),
                       label: const Text('İlanı Öne Çıkar'),
@@ -585,21 +573,21 @@ class _MyListingsPageState extends State<MyListingsPage> {
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 10),
-
+                  SizedBox(height: AppUI.gap(context, 10)),
                   SizedBox(
                     width: double.infinity,
-                    height: 46,
+                    height: AppUI.gap(context, 46),
                     child: OutlinedButton.icon(
                       onPressed: (!published || removed || removing)
                           ? null
                           : () => _removeListing(l),
                       icon: removing
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                          ? SizedBox(
+                              width: AppUI.gap(context, 18),
+                              height: AppUI.gap(context, 18),
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
                             )
                           : const Icon(Icons.visibility_off_outlined),
                       label: Text(removed ? 'Kaldırıldı' : 'İlanı Kaldır'),
@@ -624,7 +612,6 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Sekme listeleri
     final live = _items.where(_isLiveListing).toList();
     final notLive = _items.where((x) => !_isLiveListing(x)).toList();
 
@@ -634,7 +621,13 @@ class _MyListingsPageState extends State<MyListingsPage> {
         appBar: AppBar(
           backgroundColor: kTurkuaz,
           foregroundColor: Colors.white,
-          title: const Text('İlanlarım'),
+          title: Text(
+            'İlanlarım',
+            style: TextStyle(
+              fontSize: AppUI.fs(context, 16),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           actions: [
             IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
           ],
@@ -659,15 +652,28 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
   Widget _chip(String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppUI.gap(context, 10),
+        vertical: AppUI.gap(context, 6),
+      ),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppUI.r(context, 999)),
       ),
       child: Text(
         text,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: AppUI.fs(context, 12),
+          fontWeight: FontWeight.w600,
+        ),
       ),
+    );
+  }
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
     );
   }
 }

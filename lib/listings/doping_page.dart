@@ -1,3 +1,5 @@
+// ✅ APP UI (senin projedeki doğru yol)
+import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -12,7 +14,8 @@ class DopingPage extends StatefulWidget {
 }
 
 class _DopingPageState extends State<DopingPage> {
-  static const Color kTurkuaz = Color(0xFF00B8D4);
+  // ✅ AppUI’dan renk
+  static const Color kTurkuaz = AppUI.kTurkuaz;
 
   final SupabaseClient _sb = Supabase.instance.client;
 
@@ -23,7 +26,7 @@ class _DopingPageState extends State<DopingPage> {
   Map<String, dynamic> _listing = {};
   Map<String, dynamic> _details = {};
 
-  // ✅ Paket süreleri (konuştuğumuz gibi)
+  // ✅ Paket süreleri
   static const int _daysFeatured = 7; // Öne çıkar
   static const int _daysUrgent = 15; // Acil
   static const int _daysGold = 30; // Altın ilan
@@ -39,6 +42,7 @@ class _DopingPageState extends State<DopingPage> {
 
   // ------------------ LOAD LISTING ------------------
   Future<void> _loadListing() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -123,16 +127,15 @@ class _DopingPageState extends State<DopingPage> {
     }
   }
 
-  // ✅ DÜZELTİLDİ: Renkler
   // ALTIN = sarı, ACİL = mavi, ÖNE ÇIKAR = gri
   Color _planStarColor(String plan) {
     switch (plan) {
       case 'gold':
-        return const Color(0xFFFFC107); // sarı
+        return const Color(0xFFFFC107);
       case 'urgent':
-        return const Color(0xFF00B8D4); // mavi (ACİL)
+        return const Color(0xFF00B8D4);
       case 'featured':
-        return const Color(0xFF9E9E9E); // gri (ÖNE ÇIKAR)
+        return const Color(0xFF9E9E9E);
       default:
         return kTurkuaz;
     }
@@ -144,7 +147,7 @@ class _DopingPageState extends State<DopingPage> {
     return '${two(dt.day)}.${two(dt.month)}.${dt.year} ${two(dt.hour)}:${two(dt.minute)}';
   }
 
-  // ✅ Asıl iş: satın alma başarılı olunca bunu çağıracağız
+  // ✅ Satın alma başarılı olunca DB’ye uygula
   Future<void> _applyBoostToDb(String plan) async {
     final user = _sb.auth.currentUser;
     if (user == null) throw Exception('Giriş yapılmamış.');
@@ -166,7 +169,7 @@ class _DopingPageState extends State<DopingPage> {
     newDetails['boost_end'] = end.toIso8601String();
     newDetails['boost_platform'] = Theme.of(context).platform.name; // optional
 
-    // ❌ Eski sistem kalıntılarını temizle
+    // ❌ Eski alanlar temizle
     newDetails.remove('boosted');
     newDetails.remove('boost_type');
     newDetails.remove('boost_level');
@@ -186,6 +189,7 @@ class _DopingPageState extends State<DopingPage> {
   Future<void> _onBuyPressed() async {
     if (_buying) return;
 
+    if (!mounted) return;
     setState(() => _buying = true);
     try {
       await _applyBoostToDb(_selectedPlan);
@@ -208,18 +212,22 @@ class _DopingPageState extends State<DopingPage> {
   }
 
   // ------------------ WIDGETS ------------------
-  Widget _planCard({required String plan, required String desc}) {
+  Widget _planCard({
+    required String plan,
+    required String desc,
+    required BuildContext context,
+  }) {
     final selected = _selectedPlan == plan;
 
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AppUI.r(context, 16)),
       onTap: () => setState(() => _selectedPlan = plan),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(AppUI.gap(context, 14)),
         decoration: BoxDecoration(
           color: selected ? kTurkuaz.withOpacity(0.08) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppUI.r(context, 16)),
           border: Border.all(
             color: selected ? kTurkuaz : Colors.grey.shade200,
             width: selected ? 2 : 1,
@@ -236,44 +244,48 @@ class _DopingPageState extends State<DopingPage> {
           children: [
             Icon(
               Icons.star_rounded,
-              size: 20, // ✅ küçük yıldız
+              size: AppUI.fs(context, 20),
               color: _planStarColor(plan),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: AppUI.gap(context, 10)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     _planTitle(plan),
-                    style: const TextStyle(
-                      fontSize: 15,
+                    style: TextStyle(
+                      fontSize: AppUI.fs(context, 15),
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: AppUI.gap(context, 4)),
                   Text(
                     desc,
                     style: TextStyle(
                       color: Colors.grey.shade700,
                       fontWeight: FontWeight.w600,
+                      fontSize: AppUI.fs(context, 13),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: AppUI.gap(context, 10)),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: AppUI.gap(context, 10),
+                vertical: AppUI.gap(context, 6),
+              ),
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(AppUI.r(context, 999)),
               ),
               child: Text(
                 '${_planDays(plan)} gün',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w900,
-                  fontSize: 12,
+                  fontSize: AppUI.fs(context, 12),
                 ),
               ),
             ),
@@ -310,23 +322,23 @@ class _DopingPageState extends State<DopingPage> {
           : _error != null
           ? Center(child: Text('Hata: $_error'))
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: AppUI.pagePadding(context),
               children: [
                 Text(
                   widget.title.trim().isEmpty ? 'İlan' : widget.title,
-                  style: const TextStyle(
-                    fontSize: 18,
+                  style: TextStyle(
+                    fontSize: AppUI.fs(context, 18),
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: AppUI.gap(context, 10)),
 
                 // ✅ Aktif info
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: EdgeInsets.all(AppUI.gap(context, 12)),
                   decoration: BoxDecoration(
                     color: active ? Colors.green.shade50 : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(AppUI.r(context, 16)),
                     border: Border.all(
                       color: active
                           ? Colors.green.shade200
@@ -341,7 +353,7 @@ class _DopingPageState extends State<DopingPage> {
                             ? Colors.green.shade700
                             : Colors.grey.shade700,
                       ),
-                      const SizedBox(width: 10),
+                      SizedBox(width: AppUI.gap(context, 10)),
                       Expanded(
                         child: Text(
                           active
@@ -350,6 +362,7 @@ class _DopingPageState extends State<DopingPage> {
                           style: TextStyle(
                             color: Colors.grey.shade800,
                             fontWeight: FontWeight.w800,
+                            fontSize: AppUI.fs(context, 13),
                           ),
                         ),
                       ),
@@ -357,35 +370,46 @@ class _DopingPageState extends State<DopingPage> {
                   ),
                 ),
 
-                const SizedBox(height: 14),
-                const Text(
+                SizedBox(height: AppUI.gap(context, 14)),
+                Text(
                   'Paket seç',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                  style: TextStyle(
+                    fontSize: AppUI.fs(context, 16),
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: AppUI.gap(context, 10)),
 
                 _planCard(
                   plan: 'featured',
                   desc: 'İlanı listede öne taşır (7 gün).',
+                  context: context,
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: AppUI.gap(context, 10)),
                 _planCard(
                   plan: 'urgent',
                   desc: 'Acil rozet / öncelik (15 gün).',
+                  context: context,
                 ),
-                const SizedBox(height: 10),
-                _planCard(plan: 'gold', desc: 'En üst paket (30 gün).'),
+                SizedBox(height: AppUI.gap(context, 10)),
+                _planCard(
+                  plan: 'gold',
+                  desc: 'En üst paket (30 gün).',
+                  context: context,
+                ),
 
-                const SizedBox(height: 18),
+                SizedBox(height: AppUI.gap(context, 18)),
 
                 SizedBox(
-                  height: 50,
+                  height: AppUI.gap(context, 50),
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kTurkuaz,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(
+                          AppUI.r(context, 14),
+                        ),
                       ),
                     ),
                     onPressed: _buying ? null : _onBuyPressed,
@@ -401,17 +425,19 @@ class _DopingPageState extends State<DopingPage> {
                         : const Icon(Icons.shopping_bag_outlined),
                     label: Text(
                       _buying ? 'İşleniyor...' : 'Satın Al / Aktif Et',
+                      style: TextStyle(fontSize: AppUI.fs(context, 14)),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 10),
+                SizedBox(height: AppUI.gap(context, 10)),
 
                 Text(
                   'Seçili: ${_planTitle(_selectedPlan)} • Süre: ${_planDays(_selectedPlan)} gün',
                   style: TextStyle(
                     color: Colors.grey.shade700,
                     fontWeight: FontWeight.w700,
+                    fontSize: AppUI.fs(context, 13),
                   ),
                 ),
               ],

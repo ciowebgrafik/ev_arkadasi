@@ -1,5 +1,7 @@
 import 'dart:async';
 
+// ✅ APP UI
+import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 
 import 'features/auth/auth_gate.dart';
@@ -37,7 +39,12 @@ class _SplashPageState extends State<SplashPage> {
             colors: [Color(0xFFF9F9F9), Color(0xFFEFEFEF)],
           ),
         ),
-        child: const Center(child: _ResponsiveLogo()),
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(AppUI.gap(context, 16)),
+            child: const _ResponsiveLogo(),
+          ),
+        ),
       ),
     );
   }
@@ -50,12 +57,21 @@ class _ResponsiveLogo extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 📐 Her telefonda orantılı boyut
-        final logoSize = constraints.maxWidth * 0.55;
+        // ✅ AppUI ölçeği ile daha stabil logo boyutu
+        final base = AppUI.s(context);
+
+        // Ekrana göre hedef: genişliğin %55’i, ama min/max korumalı
+        final raw = constraints.maxWidth * 0.55;
+
+        // Min/Max (AppUI scale ile ufak ayar)
+        final minSize = 160 * base;
+        final maxSize = 260 * base;
+
+        final size = raw.clamp(minSize, maxSize);
 
         return Image.asset(
           'assets/logo.png',
-          width: logoSize > 260 ? 260 : logoSize, // 🔒 maksimum sınır
+          width: size,
           fit: BoxFit.contain,
           filterQuality: FilterQuality.high,
         );
