@@ -154,35 +154,46 @@ class _DopingPageState extends State<DopingPage> {
 
     final now = DateTime.now();
 
-    final currentEnd = _parseDt((_details['boost_end'] ?? '').toString());
-    final base = (currentEnd != null && currentEnd.isAfter(now))
-        ? currentEnd
+    // ✅ Mevcut kolon değerini çek (uzatma mantığı için)
+    final cur = await _sb
+        .from('listings')
+        .select('boost_until, boost_type, owner_id')
+        .eq('id', widget.listingId)
+        .maybeSingle();
+
+    if (cur == null) throw Exception('İlan bulunamadı.');
+
+    final ownerId = (cur['owner_id'] ?? '').toString();
+    if (ownerId.isNotEmpty && ownerId != user.id) {
+      throw Exception('Bu ilan sana ait değil.');
+    }
+
+    DateTime? currentUntil;
+    try {
+      final s = (cur['boost_until'] ?? '').toString();
+      if (s.isNotEmpty) currentUntil = DateTime.tryParse(s);
+    } catch (_) {}
+
+    final base = (currentUntil != null && currentUntil.isAfter(now))
+        ? currentUntil
         : now;
 
     final end = base.add(Duration(days: _planDays(plan)));
 
-    final newDetails = Map<String, dynamic>.from(_details);
+    // ✅ ÖNEMLİ: plan değerleri listing_list_page ile aynı olmalı
+    // gold / urgent / featured
+    final boostType = plan;
 
-    // ✅ yeni sistem alanları
-    newDetails['boost_plan'] = plan; // gold/featured/urgent
-    newDetails['boost_start'] = now.toIso8601String();
-    newDetails['boost_end'] = end.toIso8601String();
-    newDetails['boost_platform'] = Theme.of(context).platform.name; // optional
-
-    // ❌ Eski alanlar temizle
-    newDetails.remove('boosted');
-    newDetails.remove('boost_type');
-    newDetails.remove('boost_level');
-    newDetails.remove('boost_until');
-    newDetails.remove('is_featured');
-    newDetails.remove('is_premium');
-
+    // ✅ TABLO KOLONLARINI GÜNCELLE
     await _sb
         .from('listings')
-        .update({'details': newDetails})
+        .update({'boost_type': boostType, 'boost_until': end.toIso8601String()})
         .eq('id', widget.listingId);
 
-    _details = newDetails;
+    // (İstersen UI bilgisi için details içine de yazabilirsin ama şart değil)
+    _details = Map<String, dynamic>.from(_details);
+    _details['boost_plan'] = plan;
+    _details['boost_end'] = end.toIso8601String();
   }
 
   // ------------------ UI ACTION ------------------

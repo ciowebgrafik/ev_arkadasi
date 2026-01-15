@@ -50,7 +50,6 @@ class _HomePageState extends State<HomePage> {
     }
 
     try {
-      // ✅ is_admin çekiyoruz (kolon NULL olabiliyorsa: == true ile güvenli)
       final data = await supabase
           .from('profiles')
           .select('full_name, avatar_path, is_admin')
@@ -218,10 +217,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _openFindBestRoommate() async {
-    await _openRoommateListings();
-  }
-
   Future<void> _openFavorites() async {
     await Navigator.push(
       context,
@@ -293,6 +288,17 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.list_alt_outlined),
+              title: Text(
+                'Tüm İlanlar',
+                style: TextStyle(fontSize: AppUI.fs(context, 14)),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                Future.microtask(_openListingsAll);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.people_alt_outlined),
               title: Text(
                 'Ev Arkadaşı İlanları',
@@ -315,17 +321,6 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.list_alt_outlined),
-              title: Text(
-                'Tüm İlanlar',
-                style: TextStyle(fontSize: AppUI.fs(context, 14)),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                Future.microtask(_openListingsAll);
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.inventory_2_outlined),
               title: Text(
                 'İlanlarım',
@@ -336,8 +331,6 @@ class _HomePageState extends State<HomePage> {
                 Future.microtask(_openMyListings);
               },
             ),
-
-            // ✅ Admin Panel (sadece admin)
             if (!_loadingAdmin && _isAdmin) ...[
               const Divider(height: 1),
               ListTile(
@@ -352,7 +345,6 @@ class _HomePageState extends State<HomePage> {
                 },
               ),
             ],
-
             const Spacer(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.redAccent),
@@ -552,6 +544,8 @@ class _HomePageState extends State<HomePage> {
                 ),
                 children: [
                   SizedBox(height: AppUI.gap(context, 22)),
+
+                  // ✅ Zigzag sıralama: 1) İlan Yayınla  2) Tüm İlanlar
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -563,6 +557,14 @@ class _HomePageState extends State<HomePage> {
                   _menuPill(
                     width: safeWidth,
                     alignRight: false,
+                    text: 'Tüm İlanlar',
+                    icon: Icons.list_alt_outlined,
+                    onTap: _openListingsAll,
+                  ),
+                  SizedBox(height: AppUI.gap(context, 16)),
+                  _menuPill(
+                    width: safeWidth,
+                    alignRight: true,
                     text: 'Ev Arkadaşı İlanları',
                     icon: Icons.people_alt_outlined,
                     onTap: _openRoommateListings,
@@ -570,19 +572,12 @@ class _HomePageState extends State<HomePage> {
                   SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
-                    alignRight: true,
+                    alignRight: false,
                     text: 'Ev Eşyaları İlanları',
                     icon: Icons.chair_alt_outlined,
                     onTap: _openItemListings,
                   ),
-                  SizedBox(height: AppUI.gap(context, 16)),
-                  _menuPill(
-                    width: safeWidth,
-                    alignRight: false,
-                    text: 'Bana Uygun Ev Arkadaşı Bul',
-                    icon: Icons.search_outlined,
-                    onTap: _openFindBestRoommate,
-                  ),
+
                   SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
@@ -631,6 +626,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.work_outline,
                     onTap: _openDailyJobs,
                   ),
+
                   SizedBox(height: AppUI.gap(context, 18)),
                   _adSlot(width: safeWidth, alignRight: false),
                   SizedBox(height: AppUI.gap(context, 18)),

@@ -391,6 +391,109 @@ class _ListingListPageState extends State<ListingListPage> {
     return out;
   }
 
+  // ===========================
+  // ✅ QUICK CATEGORY (Search box -> chip / auto open)
+  // ===========================
+  List<ListingType> _quickTypesFromText(String raw) {
+    final q = raw.toLowerCase().trim();
+    if (q.isEmpty) return [];
+
+    bool hasAny(List<String> keys) => keys.any((k) => q.contains(k));
+    final out = <ListingType>[];
+
+    if (hasAny(['ev arkadaşı', 'ev arkadasi', 'roommate'])) {
+      out.add(ListingType.roommate);
+    }
+    if (hasAny([
+      'ev eşyası',
+      'ev esyasi',
+      'eşya',
+      'esya',
+      'mobilya',
+      'beyaz eşya',
+      'beyaz esya',
+    ])) {
+      out.add(ListingType.item);
+    }
+    if (hasAny(['nakliye', 'taşıma', 'tasima', 'transport'])) {
+      out.add(ListingType.transport);
+    }
+    if (hasAny(['dekorasyon', 'onarım', 'onarim', 'tamir', 'handyman'])) {
+      out.add(ListingType.repair);
+    }
+    if (hasAny(['temizlik', 'cleaning'])) {
+      out.add(ListingType.cleaning);
+    }
+    if (hasAny(['evcil', 'hayvan', 'sahiplendirme', 'pet'])) {
+      out.add(ListingType.pet);
+    }
+    if (hasAny(['günlük iş', 'gunluk is', 'günlük', 'gunluk', 'daily'])) {
+      out.add(ListingType.daily_job);
+    }
+
+    return out.toSet().toList();
+  }
+
+  String _quickLabel(ListingType t) {
+    switch (t) {
+      case ListingType.roommate:
+        return 'Ev Arkadaşı';
+      case ListingType.item:
+        return 'Ev Eşyası';
+      case ListingType.transport:
+        return 'Nakliye';
+      case ListingType.repair:
+        return 'Dekorasyon / Onarım';
+      case ListingType.cleaning:
+        return 'Temizlik';
+      case ListingType.pet:
+        return 'Evcil Hayvan';
+      case ListingType.daily_job:
+        return 'Günlük İş';
+      default:
+        return t.label;
+    }
+  }
+
+  Future<void> _applyQuickType(ListingType t) async {
+    setState(() {
+      _type = t;
+
+      if (_type == ListingType.item) {
+        _period = null;
+      } else {
+        _itemCategory = null;
+      }
+
+      // ✅ kategori kelimesi arama kutusunda kalmasın
+      _qCtrl.text = '';
+    });
+
+    await _load();
+  }
+
+  Widget _quickTypeChips() {
+    final q = _clean(_qCtrl.text);
+    final matches = _quickTypesFromText(q);
+
+    if (q.isEmpty || matches.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: EdgeInsets.only(top: AppUI.gap(context, 10)),
+      child: Wrap(
+        spacing: AppUI.gap(context, 8),
+        runSpacing: AppUI.gap(context, 8),
+        children: matches.map((t) {
+          return ActionChip(
+            avatar: const Icon(Icons.flash_on, size: 18),
+            label: Text('${_quickLabel(t)} İlanları'),
+            onPressed: () => _applyQuickType(t),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   // ---------------------- ✅ FETCH ----------------------
   Future<List<Map<String, dynamic>>> _fetchListingsDirect() async {
     final cityTxt = _clean(_cityCtrl.text);
@@ -645,6 +748,11 @@ class _ListingListPageState extends State<ListingListPage> {
                       ),
                       SizedBox(height: AppUI.gap(ctx, 12)),
 
+                      // ... (filtre sheet devamı PART 2'de)
+                      // ==========================
+                      // ✅ listing_list_page.dart
+                      // ✅ PART 2 / 2
+                      // ==========================
                       DropdownButtonFormField<ListingType?>(
                         value: tmpType,
                         decoration: const InputDecoration(
@@ -890,11 +998,6 @@ class _ListingListPageState extends State<ListingListPage> {
     _applySort(copy);
     setState(() => _items = copy);
   }
-
-  // ==========================
-  // ✅ listing_list_page.dart
-  // ✅ PART 2 / 2
-  // ==========================
 
   // ✅ KAYITLI ARAMALAR: AÇ
   Future<void> _openSavedSearchesSheet() async {
@@ -1406,7 +1509,17 @@ class _ListingListPageState extends State<ListingListPage> {
         TextField(
           controller: _qCtrl,
           textInputAction: TextInputAction.search,
-          onSubmitted: (_) => _load(),
+          onSubmitted: (_) async {
+            final q = _clean(_qCtrl.text);
+            final matches = _quickTypesFromText(q);
+
+            // ✅ sadece 1 kategori yakaladıysa (ve kısa metinse) otomatik aç
+            if (matches.length == 1 && q.length <= 30) {
+              await _applyQuickType(matches.first);
+              return;
+            }
+            await _load();
+          },
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search),
             hintText: 'Ara (başlık / açıklama / tür)',
@@ -1428,8 +1541,31 @@ class _ListingListPageState extends State<ListingListPage> {
                     },
                   ),
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (v) {
+            final inferred = _inferTypesFromQuery(v);
+
+            if (inferred.length == 1) {
+              final newType = inferred.first;
+
+              if (_type != newType) {
+                setState(() {
+                  _type = newType;
+
+                  if (_type == ListingType.item) {
+                    _period = null;
+                  } else {
+                    _itemCategory = null;
+                  }
+                });
+              }
+            }
+
+            setState(() {});
+          },
         ),
+
+        // ✅ yazarken kategori önerileri (chip)
+        _quickTypeChips(),
       ],
     );
   }
@@ -1521,8 +1657,6 @@ class _ListingListPageState extends State<ListingListPage> {
                         top: AppUI.gap(context, 6),
                         child: _boostStarBadge(it),
                       ),
-
-                      // ❌ ACİL yazı etiketi yok (tamamen kaldırıldı)
                     ],
                   ),
                 ),
@@ -1566,7 +1700,6 @@ class _ListingListPageState extends State<ListingListPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Stabil görünüm: cihazların "yazı boyutu" (font scaling) farkını dengeler
     final mq = MediaQuery.of(context);
     return MediaQuery(
       data: mq.copyWith(textScaler: const TextScaler.linear(1.0)),

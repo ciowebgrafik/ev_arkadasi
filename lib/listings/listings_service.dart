@@ -176,9 +176,6 @@ class ListingsService {
   }
 
   // ===================== ✅ DOİNG / DOPİNG UYGULA (kolonlarla) =====================
-  /// Gold: 30 gün
-  /// Urgent: 15 gün
-  /// Featured: 7 gün
   Future<void> applyDoping({
     required String listingId,
     required DopingType type,
@@ -217,15 +214,9 @@ class ListingsService {
   }
 
   // ===================== ✅ APPLY BOOST (details json içine yazar) =====================
-  /// MyListingsPage'deki rozet kodun boost_plan + boost_end üzerinden çalışıyor.
-  /// Bu fonksiyon mevcut details'ı ezmeden merge eder.
-  ///
-  /// plan örnekleri:
-  /// - "featured" / "gold" / "urgent"  (senin badge switch'ine uygun)
-  /// - istersen "featured_7" gibi de yazarsın ama badge kodunda plan eşleşmesini ona göre değiştirmen gerekir.
   Future<void> applyBoost({
     required String listingId,
-    required String plan, // featured | gold | urgent | bronze | silver
+    required String plan, // featured | gold | urgent
     required int days,
     required int priceTry,
   }) async {
@@ -235,7 +226,6 @@ class ListingsService {
     final now = DateTime.now();
     final end = now.add(Duration(days: days));
 
-    // ✅ mevcut details + owner kontrol
     final cur = await _db
         .from('listings')
         .select('details, owner_id')
@@ -253,7 +243,7 @@ class ListingsService {
       details = Map<String, dynamic>.from(existing);
     if (existing is Map) details = existing.map((k, v) => MapEntry('$k', v));
 
-    details['boost_plan'] = plan; // ✅ MyListingsPage bunu okuyor
+    details['boost_plan'] = plan;
     details['boost_start'] = now.toIso8601String();
     details['boost_end'] = end.toIso8601String();
     details['boost_days'] = days;
@@ -271,7 +261,6 @@ class ListingsService {
   }
 
   // ===================== ✅ İLANI KALDIR (soft remove) =====================
-  /// “kaldır” = paused
   Future<void> removeListing({required String listingId}) async {
     final user = _db.auth.currentUser;
     if (user == null) throw Exception('Giriş yapılmamış.');
@@ -324,7 +313,6 @@ class ListingsService {
     return paths;
   }
 
-  /// REPLACE
   Future<void> attachListingImages({
     required String listingId,
     required List<String> imagePaths,
@@ -338,7 +326,6 @@ class ListingsService {
         .eq('id', listingId);
   }
 
-  /// Storage'dan path sil (Private bucket)
   Future<void> deleteListingImagesFromStorage(List<String> paths) async {
     final cleaned = paths
         .map((e) => e.trim())
@@ -465,9 +452,8 @@ class ListingsService {
     }
 
     if (type != null) q = q.eq('type', listingTypeToDb(type));
-    if (pricePeriod != null) {
+    if (pricePeriod != null)
       q = q.eq('price_period', pricePeriodToDb(pricePeriod));
-    }
 
     if (city != null && city.trim().isNotEmpty) {
       final c = _norm(city);
@@ -507,6 +493,17 @@ class ListingsService {
     return List<Map<String, dynamic>>.from(res);
   }
 
+  /// ✅ Tek ilan çek (komple sil için lazım)
+  Future<Map<String, dynamic>?> fetchListingById(String listingId) async {
+    final res = await _db
+        .from('listings')
+        .select('*')
+        .eq('id', listingId)
+        .maybeSingle();
+    if (res == null) return null;
+    return Map<String, dynamic>.from(res as Map);
+  }
+
   // ✅ DEĞİŞİKLİK: republishListing artık published yapmaz -> pending (admin onay)
   Future<void> republishListing(String listingId) async {
     final user = _db.auth.currentUser;
@@ -534,10 +531,41 @@ class ListingsService {
         .eq('owner_id', user.id);
   }
 
+  /// ✅ Sadece DB kaydını siler (foto kalır)
   Future<void> deleteListing(String listingId) async {
     final user = _db.auth.currentUser;
     if (user == null) throw Exception('Giriş yapılmamış.');
 
+    await _db
+        .from('listings')
+        .delete()
+        .eq('id', listingId)
+        .eq('owner_id', user.id);
+  }
+
+  /// ✅ KOMPLE SİL: önce storage foto sil -> sonra db kaydı sil
+  Future<void> deleteListingCompletely(String listingId) async {
+    final user = _db.auth.currentUser;
+    if (user == null) throw Exception('Giriş yapılmamış.');
+
+    // 1) listing'i çek (image_paths için)
+    final row = await _db
+        .from('listings')
+        .select('id, owner_id, image_paths')
+        .eq('id', listingId)
+        .eq('owner_id', user.id)
+        .maybeSingle();
+
+    if (row == null) throw Exception('İlan bulunamadı.');
+
+    // 2) foto yollarını sil
+    final listing = Map<String, dynamic>.from(row as Map);
+    final paths = extractImagePaths(listing);
+    if (paths.isNotEmpty) {
+      await deleteListingImagesFromStorage(paths);
+    }
+
+    // 3) DB kaydını sil
     await _db
         .from('listings')
         .delete()

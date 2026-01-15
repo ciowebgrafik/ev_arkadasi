@@ -1,5 +1,6 @@
 import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'doping_page.dart';
 import 'listing_create_page.dart';
@@ -17,6 +18,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
   static const Color kTurkuaz = Color(0xFF00B8D4);
 
   final _service = ListingsService();
+  final SupabaseClient _sb = Supabase.instance.client; // ✅ NEW
 
   bool _loading = true;
   String? _error;
@@ -31,6 +33,9 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
   // ✅ öne çıkar loading: listingId -> bool
   final Map<String, bool> _featureLoadingById = {};
+
+  // ✅ SİLME loading: listingId -> bool  (NEW)
+  final Map<String, bool> _deleteLoadingById = {};
 
   @override
   void initState() {
@@ -258,6 +263,52 @@ class _MyListingsPageState extends State<MyListingsPage> {
     }
   }
 
+  // ===========================
+  // ✅ İLANI KOMPLE SİL (YAYINDA DEĞİL SEKMESİ)  ✅ NEW
+  // ===========================
+  Future<void> _deleteListing(Map<String, dynamic> listing) async {
+    final id = (listing['id'] ?? '').toString();
+    if (id.isEmpty) return;
+
+    final status = (listing['status'] ?? '').toString();
+
+    // ✅ Güvenlik: yayınlı ilan silinmesin
+    if (_isPublished(status) && !_isExpired(listing)) {
+      _snack('Yayındaki ilan silinemez. Önce kaldır.');
+      return;
+    }
+
+    if (_deleteLoadingById[id] == true) return;
+
+    final ok = await _confirm(
+      title: 'İlan silinsin mi?',
+      message: 'Bu işlem geri alınamaz.\n\nİlan tamamen silinecek.',
+      confirmText: 'Sil',
+      danger: true,
+    );
+    if (ok != true) return;
+
+    setState(() => _deleteLoadingById[id] = true);
+
+    try {
+      await _sb.from('listings').delete().eq('id', id);
+
+      if (!mounted) return;
+
+      // ✅ ekrandan kaldır
+      _items.removeWhere((x) => (x['id'] ?? '').toString() == id);
+      _firstImageUrlCache.remove(id);
+
+      _snack('İlan silindi ✅');
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Silinemedi: $e');
+    } finally {
+      if (mounted) setState(() => _deleteLoadingById[id] = false);
+    }
+  }
+
   Future<bool?> _confirm({
     required String title,
     required String message,
@@ -366,7 +417,11 @@ class _MyListingsPageState extends State<MyListingsPage> {
   // ✅ UI - List Builder
   // ===========================
 
-  Widget _buildList(List<Map<String, dynamic>> list) {
+  // ✅ isNotLiveTab param eklendi (NEW)
+  Widget _buildList(
+    List<Map<String, dynamic>> list, {
+    required bool isNotLiveTab,
+  }) {
     if (list.isEmpty) {
       return const Center(child: Text('Bu sekmede ilan yok.'));
     }
@@ -399,6 +454,7 @@ class _MyListingsPageState extends State<MyListingsPage> {
 
           final removing = _removeLoadingById[id] == true;
           final featuring = _featureLoadingById[id] == true;
+          final deleting = _deleteLoadingById[id] == true; // ✅ NEW
 
           final republishLabel = removed
               ? 'Onaya Gönder'
@@ -573,30 +629,60 @@ class _MyListingsPageState extends State<MyListingsPage> {
                       ),
                     ),
                   ),
-                  SizedBox(height: AppUI.gap(context, 10)),
-                  SizedBox(
-                    width: double.infinity,
-                    height: AppUI.gap(context, 46),
-                    child: OutlinedButton.icon(
-                      onPressed: (!published || removed || removing)
-                          ? null
-                          : () => _removeListing(l),
-                      icon: removing
-                          ? SizedBox(
-                              width: AppUI.gap(context, 18),
-                              height: AppUI.gap(context, 18),
-                              child: const CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.visibility_off_outlined),
-                      label: Text(removed ? 'Kaldırıldı' : 'İlanı Kaldır'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red.shade700,
-                        side: BorderSide(color: Colors.red.shade200),
+
+                  // ✅ Yayında sekmesinde kaldır göster, Yayında Değil sekmesinde gösterme
+                  if (!isNotLiveTab) ...[
+                    SizedBox(height: AppUI.gap(context, 10)),
+                    SizedBox(
+                      width: double.infinity,
+                      height: AppUI.gap(context, 46),
+                      child: OutlinedButton.icon(
+                        onPressed: (!published || removed || removing)
+                            ? null
+                            : () => _removeListing(l),
+                        icon: removing
+                            ? SizedBox(
+                                width: AppUI.gap(context, 18),
+                                height: AppUI.gap(context, 18),
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.visibility_off_outlined),
+                        label: Text(removed ? 'Kaldırıldı' : 'İlanı Kaldır'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red.shade700,
+                          side: BorderSide(color: Colors.red.shade200),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
+
+                  // ✅ SİL BUTONU: SADECE "YAYINDA DEĞİL" SEKMESİNDE  ✅ NEW
+                  if (isNotLiveTab) ...[
+                    SizedBox(height: AppUI.gap(context, 10)),
+                    SizedBox(
+                      width: double.infinity,
+                      height: AppUI.gap(context, 46),
+                      child: OutlinedButton.icon(
+                        onPressed: deleting ? null : () => _deleteListing(l),
+                        icon: deleting
+                            ? SizedBox(
+                                width: AppUI.gap(context, 18),
+                                height: AppUI.gap(context, 18),
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.delete_outline),
+                        label: const Text('İlanı Sil'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red.shade800,
+                          side: BorderSide(color: Colors.red.shade200),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -645,7 +731,12 @@ class _MyListingsPageState extends State<MyListingsPage> {
             ? const Center(child: CircularProgressIndicator())
             : _error != null
             ? Center(child: Text('Hata: $_error'))
-            : TabBarView(children: [_buildList(live), _buildList(notLive)]),
+            : TabBarView(
+                children: [
+                  _buildList(live, isNotLiveTab: false),
+                  _buildList(notLive, isNotLiveTab: true),
+                ],
+              ),
       ),
     );
   }
