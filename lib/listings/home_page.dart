@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/widgets/ad_banner_box.dart'; // ✅ AdMob banner kutusu
 import '../core/widgets/app_ui.dart';
 import '../features/auth/auth_gate.dart';
 import '../features/profile/profil_sayfasi.dart';
@@ -409,40 +410,9 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _adSlot({required double width, required bool alignRight}) {
-    return Align(
-      alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        width: width,
-        height: AppUI.gap(context, 110),
-        decoration: const ShapeDecoration(
-          color: Colors.white,
-          shape: StadiumBorder(side: BorderSide(color: kTurkuaz, width: 1.6)),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Google Reklamları',
-                style: TextStyle(
-                  fontSize: AppUI.fs(context, 16),
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              SizedBox(height: AppUI.gap(context, 6)),
-              Text(
-                'Reklam alanı (Banner)',
-                style: TextStyle(
-                  fontSize: AppUI.fs(context, 12),
-                  color: Colors.black54,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  // ✅ Banner’ı HomePage’de de “bottomNavigationBar” ile sabitleyelim
+  Widget _bottomAd() {
+    return const SafeArea(top: false, child: AdBannerBox());
   }
 
   // ================= BUILD =================
@@ -528,6 +498,10 @@ class _HomePageState extends State<HomePage> {
           SizedBox(width: AppUI.gap(context, 6)),
         ],
       ),
+
+      // ✅ DOĞRU YER: bottomNavigationBar
+      bottomNavigationBar: _bottomAd(),
+
       body: RefreshIndicator(
         onRefresh: _loadMe,
         child: _loading
@@ -540,12 +514,11 @@ class _HomePageState extends State<HomePage> {
             : ListView(
                 padding: EdgeInsets.only(
                   top: AppUI.gap(context, 16),
+                  // ✅ alttaki banner’ın üstünde biraz nefes + güvenli
                   bottom: AppUI.gap(context, 16),
                 ),
                 children: [
                   SizedBox(height: AppUI.gap(context, 22)),
-
-                  // ✅ Zigzag sıralama: 1) İlan Yayınla  2) Tüm İlanlar
                   _menuPill(
                     width: safeWidth,
                     alignRight: true,
@@ -577,7 +550,6 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.chair_alt_outlined,
                     onTap: _openItemListings,
                   ),
-
                   SizedBox(height: AppUI.gap(context, 16)),
                   _menuPill(
                     width: safeWidth,
@@ -626,9 +598,6 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.work_outline,
                     onTap: _openDailyJobs,
                   ),
-
-                  SizedBox(height: AppUI.gap(context, 18)),
-                  _adSlot(width: safeWidth, alignRight: false),
                   SizedBox(height: AppUI.gap(context, 18)),
                   Center(
                     child: Text(
@@ -640,6 +609,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
+                  SizedBox(height: AppUI.gap(context, 18)),
                 ],
               ),
       ),

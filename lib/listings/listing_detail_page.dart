@@ -1,3 +1,7 @@
+// ==========================
+// ✅ listing_detail_page.dart
+// ✅ PART 1 / 2
+// ==========================
 import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -751,6 +755,11 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       ),
     );
   }
+
+  // ==========================
+  // ✅ listing_detail_page.dart
+  // ✅ PART 2 / 2
+  // ==========================
 
   // ---------------------- owner card ----------------------
 

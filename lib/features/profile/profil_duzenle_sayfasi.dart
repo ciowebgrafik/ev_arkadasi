@@ -1,15 +1,20 @@
 import 'dart:typed_data';
 
+import 'package:ev_arkadasi/core/widgets/ad_banner_box.dart';
 import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// -------------------------
-// ✅ (Opsiyonel) AdMob
-// google_mobile_ads ekleyince bunu açarsın.
-// import 'package:google_mobile_ads/google_mobile_ads.dart';
-// -------------------------
+/// ✅ ProfilDuzenleSayfasi
+/// - Şehir/İlçe dropdown (cities + districts)
+/// - Avatar seç + Supabase Storage upload
+/// - Kaydet → profiles update
+/// - Altta reklam alanı: SENİN sisteminle uyumlu olacak şekilde
+///   ✅ core/widgets/ad_banner_box.dart (AdBannerBox) kullanılıyor.
+///
+/// Not: Bu sayfada "placeholder" reklam yok artık.
+/// Direkt AdBannerBox var (test id ile çalışır / AdMob yoksa zaten görünmez).
 
 class ProfilDuzenleSayfasi extends StatefulWidget {
   const ProfilDuzenleSayfasi({super.key});
@@ -21,7 +26,7 @@ class ProfilDuzenleSayfasi extends StatefulWidget {
 class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   static const Color kTurkuaz = Color(0xFF00B8D4);
 
-  final supabase = Supabase.instance.client;
+  final SupabaseClient supabase = Supabase.instance.client;
 
   final _adController = TextEditingController();
   final _telefonController = TextEditingController();
@@ -49,33 +54,10 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   List<Map<String, dynamic>> _cities = [];
   List<String> _districts = [];
 
-  // =========================
-  // ✅ REKLAM AYARLARI
-  // =========================
-  // Şimdilik false bırak: placeholder çıkar, proje patlamaz.
-  // AdMob kurunca true yaparsın.
-  final bool useRealAdmob = false;
-
-  // BannerAd? _bannerAd;
-  // bool _bannerLoaded = false;
-
-  // Android test banner unit id:
-  // ca-app-pub-3940256099942544/6300978111
-  // iOS test banner unit id:
-  // ca-app-pub-3940256099942544/2934735716
-  final String bannerAdUnitIdAndroidTest =
-      "ca-app-pub-3940256099942544/6300978111";
-  final String bannerAdUnitIdIosTest = "ca-app-pub-3940256099942544/2934735716";
-
   @override
   void initState() {
     super.initState();
     _initLoad();
-
-    // ✅ AdMob açınca burayı aktif edersin:
-    // if (useRealAdmob) {
-    //   _loadBanner();
-    // }
   }
 
   @override
@@ -83,27 +65,8 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
     _adController.dispose();
     _telefonController.dispose();
     _bioController.dispose();
-
-    // _bannerAd?.dispose();
     super.dispose();
   }
-
-  // void _loadBanner() {
-  //   _bannerAd = BannerAd(
-  //     size: AdSize.banner,
-  //     adUnitId: bannerAdUnitIdAndroidTest, // iOS’ta platform check yaparsın
-  //     listener: BannerAdListener(
-  //       onAdLoaded: (ad) {
-  //         if (!mounted) return;
-  //         setState(() => _bannerLoaded = true);
-  //       },
-  //       onAdFailedToLoad: (ad, err) {
-  //         ad.dispose();
-  //       },
-  //     ),
-  //     request: const AdRequest(),
-  //   )..load();
-  // }
 
   void _snack(String msg) {
     if (!mounted) return;
@@ -235,6 +198,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
       _existingAvatarPath = (data?['avatar_path'] ?? '').toString();
 
+      // ✅ Şehir seçimini eşle (isim üzerinden)
       if (_initialCityName.isNotEmpty && _cities.isNotEmpty) {
         final row = _cities.firstWhere(
           (x) =>
@@ -244,9 +208,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
         );
 
         final idRaw = row['id'];
-        final id = (idRaw is int)
-            ? idRaw
-            : int.tryParse(idRaw?.toString() ?? '');
+        final id = (idRaw is int) ? idRaw : int.tryParse('${idRaw ?? ''}');
 
         if (id != null) {
           _selectedCityId = id;
@@ -254,6 +216,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
 
           await _loadDistrictsOfCityId(id);
 
+          // ✅ İlçe eşle
           if (_initialDistrictName.isNotEmpty) {
             final match = _districts.firstWhere(
               (d) => d.toLowerCase() == _initialDistrictName.toLowerCase(),
@@ -325,6 +288,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
       return;
     }
 
+    if (_saving) return;
     setState(() => _saving = true);
 
     try {
@@ -354,45 +318,8 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
   }
 
   // =====================
-  // ✅ REKLAM WIDGET
+  // ✅ ŞEHİR / İLÇE UI
   // =====================
-  Widget _adBanner(BuildContext context) {
-    // 1) Şimdilik placeholder: proje %100 çalışır
-    if (!useRealAdmob) {
-      return Container(
-        margin: EdgeInsets.only(top: AppUI.gap(context, 12)),
-        height: AppUI.gap(context, 60),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(AppUI.r(context, 12)),
-          border: Border.all(color: Colors.black.withOpacity(0.08)),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          "REKLAM ALANI (Banner)",
-          style: TextStyle(
-            fontSize: AppUI.fs(context, 12),
-            fontWeight: FontWeight.w700,
-            color: Colors.black54,
-          ),
-        ),
-      );
-    }
-
-    // 2) AdMob açınca burayı kullanırsın:
-    // if (_bannerAd == null || !_bannerLoaded) {
-    //   return SizedBox(height: AppUI.gap(context, 60));
-    // }
-    // return Container(
-    //   margin: EdgeInsets.only(top: AppUI.gap(context, 12)),
-    //   alignment: Alignment.center,
-    //   width: _bannerAd!.size.width.toDouble(),
-    //   height: _bannerAd!.size.height.toDouble(),
-    //   child: AdWidget(ad: _bannerAd!),
-    // );
-
-    return SizedBox(height: AppUI.gap(context, 60));
-  }
 
   Widget _cityDropdown() {
     if (_loadingCities) {
@@ -408,9 +335,7 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
       items: _cities
           .map((c) {
             final idRaw = c['id'];
-            final id = (idRaw is int)
-                ? idRaw
-                : int.tryParse(idRaw?.toString() ?? '');
+            final id = (idRaw is int) ? idRaw : int.tryParse('${idRaw ?? ''}');
             final name = (c['name'] ?? '').toString();
             if (id == null) return null;
             return DropdownMenuItem<int>(
@@ -495,6 +420,10 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
       ),
     );
   }
+
+  // =====================
+  // ✅ BODY
+  // =====================
 
   Widget _buildBody(BuildContext context) {
     final ImageProvider? bg = (_avatarBytes != null)
@@ -624,8 +553,14 @@ class _ProfilDuzenleSayfasiState extends State<ProfilDuzenleSayfasi> {
                   ),
                 ),
 
-                // ✅ REKLAM ALANI (sayfanın altında)
-                _adBanner(context),
+                // ✅ SENİN SİSTEMİN: GERÇEK BANNER WIDGET
+                // - Reklam gösterilemiyorsa zaten shrink olur.
+                // - Sabit ve güvenli.
+                SizedBox(height: AppUI.gap(context, 12)),
+                const AdBannerBox(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  backgroundColor: Colors.white,
+                ),
 
                 SizedBox(height: AppUI.gap(context, 24)),
               ],

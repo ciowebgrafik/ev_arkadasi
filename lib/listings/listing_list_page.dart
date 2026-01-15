@@ -1,10 +1,11 @@
 // ==========================
 // ✅ listing_list_page.dart
-// ✅ PART 1 / 2
+// ✅ TEK PARÇA (REKLAMLA UYUMLU - SABİT ALT BANNER)
 // ==========================
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/widgets/ad_banner_box.dart'; // ✅ GERÇEK ADMOB BANNER (bizim dosya)
 import '../core/widgets/app_ui.dart'; // ✅ STABIL UI
 import 'listing_detail_page.dart';
 import 'listing_enums.dart';
@@ -747,12 +748,6 @@ class _ListingListPageState extends State<ListingListPage> {
                         ),
                       ),
                       SizedBox(height: AppUI.gap(ctx, 12)),
-
-                      // ... (filtre sheet devamı PART 2'de)
-                      // ==========================
-                      // ✅ listing_list_page.dart
-                      // ✅ PART 2 / 2
-                      // ==========================
                       DropdownButtonFormField<ListingType?>(
                         value: tmpType,
                         decoration: const InputDecoration(
@@ -783,7 +778,6 @@ class _ListingListPageState extends State<ListingListPage> {
                         },
                       ),
                       SizedBox(height: AppUI.gap(ctx, 12)),
-
                       if (isItem)
                         DropdownButtonFormField<ItemCategory?>(
                           value: tmpItemCat,
@@ -805,7 +799,6 @@ class _ListingListPageState extends State<ListingListPage> {
                           ],
                           onChanged: (v) => setLocal(() => tmpItemCat = v),
                         ),
-
                       if (!isItem)
                         DropdownButtonFormField<PricePeriod?>(
                           value: tmpPeriod,
@@ -827,9 +820,7 @@ class _ListingListPageState extends State<ListingListPage> {
                           ],
                           onChanged: (v) => setLocal(() => tmpPeriod = v),
                         ),
-
                       SizedBox(height: AppUI.gap(ctx, 12)),
-
                       if (_locError != null) ...[
                         Align(
                           alignment: Alignment.centerLeft,
@@ -840,7 +831,6 @@ class _ListingListPageState extends State<ListingListPage> {
                         ),
                         SizedBox(height: AppUI.gap(ctx, 8)),
                       ],
-
                       DropdownButtonFormField<int?>(
                         value: tmpCityId,
                         decoration: const InputDecoration(
@@ -885,9 +875,7 @@ class _ListingListPageState extends State<ListingListPage> {
                                 if (mounted) setLocal(() {});
                               },
                       ),
-
                       SizedBox(height: AppUI.gap(ctx, 12)),
-
                       DropdownButtonFormField<int?>(
                         value: tmpDistrictId,
                         decoration: InputDecoration(
@@ -925,11 +913,9 @@ class _ListingListPageState extends State<ListingListPage> {
                                 });
                               },
                       ),
-
                       SizedBox(height: AppUI.gap(ctx, 10)),
                       if (_loadingCities || _loadingDistricts)
                         const LinearProgressIndicator(minHeight: 2),
-
                       SizedBox(height: AppUI.gap(ctx, 14)),
                       Row(
                         children: [
@@ -1363,7 +1349,6 @@ class _ListingListPageState extends State<ListingListPage> {
       if (city.isNotEmpty) city,
       if (district.isNotEmpty) district,
     ].join(' / ');
-
     final qPart = q.isEmpty ? '' : ' • "$q"';
 
     if (t == ListingType.item) {
@@ -1439,11 +1424,10 @@ class _ListingListPageState extends State<ListingListPage> {
   String _fmtLocation(Map<String, dynamic> it) {
     final city = _clean((it['city'] ?? '').toString());
     final district = _clean((it['district'] ?? '').toString());
-    final loc = [
+    return [
       if (city.isNotEmpty) city,
       if (district.isNotEmpty) district,
     ].join(' / ');
-    return loc;
   }
 
   Future<String?> _getFirstImageSignedUrl(Map<String, dynamic> it) async {
@@ -1761,6 +1745,16 @@ class _ListingListPageState extends State<ListingListPage> {
           ),
         ],
       ),
+
+      // ✅ En stabil yöntem: banner’ı bottomNavigationBar’a sabitle
+      bottomNavigationBar: const SafeArea(
+        top: false,
+        child: AdBannerBox(
+          // istersen padding ver:
+          // padding: EdgeInsets.symmetric(vertical: 6),
+        ),
+      ),
+
       body: Column(
         children: [
           Center(

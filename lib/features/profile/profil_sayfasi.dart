@@ -1,3 +1,4 @@
+import 'package:ev_arkadasi/core/widgets/ad_banner_box.dart'; // ✅ EKLENDİ
 import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -282,6 +283,13 @@ class _ProfilSayfasiState extends State<ProfilSayfasi> {
                                         fontSize: AppUI.fs(context, 12),
                                       ),
                                   textAlign: TextAlign.center,
+                                ),
+
+                                // ✅ REKLAM BANNER (Profil sayfasının altı)
+                                SizedBox(height: AppUI.gap(context, 12)),
+                                const AdBannerBox(
+                                  padding: EdgeInsets.symmetric(vertical: 6),
+                                  backgroundColor: Colors.white,
                                 ),
                               ],
                             ),

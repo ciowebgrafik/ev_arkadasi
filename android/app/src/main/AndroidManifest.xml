@@ -5,6 +5,11 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
+        <!-- ✅ AdMob APP ID burada olmalı (application içinde) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -15,12 +20,6 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustPan">
 
-            <!-- ✅ Impeller KAPAT (Xiaomi/Redmi klavye lag fix) -->
-            <meta-data
-                android:name="io.flutter.embedding.android.EnableImpeller"
-                android:value="false" />
-
-            <!-- Flutter normal theme -->
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
@@ -31,10 +30,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Flutter embedding -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
     </application>
 
     <queries>
