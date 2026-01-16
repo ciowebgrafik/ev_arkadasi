@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'auth_magic_link_page.dart';
+import 'auth_otp_request_page.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -31,6 +31,7 @@ class _AuthPageState extends State<AuthPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
+  // ✅ NORMAL ŞİFRE İLE GİRİŞ
   Future<void> _signInWithPassword() async {
     final email = _emailCtrl.text.trim();
     final pass = _passCtrl.text;
@@ -43,7 +44,7 @@ class _AuthPageState extends State<AuthPage> {
     setState(() => _loading = true);
     try {
       await supabase.auth.signInWithPassword(email: email, password: pass);
-      // AuthGate zaten yönlendirecek
+      // AuthGate yönlendirecek
     } on AuthException catch (e) {
       _msg(e.message);
     } catch (e) {
@@ -53,31 +54,38 @@ class _AuthPageState extends State<AuthPage> {
     }
   }
 
-  Future<void> _sendResetPasswordEmail() async {
+  // ✅ ŞİFREMİ UNUTTUM = KOD İLE GİRİŞ
+  void _forgotPasswordAsCode() {
     final email = _emailCtrl.text.trim();
-    if (email.isEmpty) {
-      _msg('Şifre sıfırlamak için email yazmalısın');
+
+    if (email.isEmpty || !email.contains('@')) {
+      _msg('Şifremi unuttum için email gir.');
       return;
     }
 
-    setState(() => _loading = true);
-    try {
-      // ✅ Supabase reset link gönderir
-      await supabase.auth.resetPasswordForEmail(email);
-      _msg('Şifre sıfırlama linki mailine gönderildi.');
-    } on AuthException catch (e) {
-      _msg(e.message);
-    } catch (e) {
-      _msg('Hata: $e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _goMagicLink() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const AuthMagicLinkPage()),
+      MaterialPageRoute(
+        builder: (_) => AuthOtpRequestPage(
+          initialEmail: email,
+          isForgotPassword: true, // ✅ şifre sıfırlama akışı = OTP
+        ),
+      ),
+    );
+  }
+
+  // ✅ KOD İLE GİRİŞ (normal login / kayıt)
+  void _goCodeLogin() {
+    final email = _emailCtrl.text.trim();
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AuthOtpRequestPage(
+          initialEmail: email.isNotEmpty ? email : null,
+          isForgotPassword: false,
+        ),
+      ),
     );
   }
 
@@ -115,16 +123,16 @@ class _AuthPageState extends State<AuthPage> {
 
             const SizedBox(height: 10),
 
-            // ✅ Şifremi unuttum / Kod ile giriş
+            // ✅ Şifremi unuttum = OTP
             Row(
               children: [
                 TextButton(
-                  onPressed: _loading ? null : _sendResetPasswordEmail,
+                  onPressed: _loading ? null : _forgotPasswordAsCode,
                   child: const Text('Şifremi unuttum'),
                 ),
                 const Spacer(),
                 TextButton(
-                  onPressed: _loading ? null : _goMagicLink,
+                  onPressed: _loading ? null : _goCodeLogin,
                   child: const Text('Kod ile giriş'),
                 ),
               ],
@@ -143,11 +151,11 @@ class _AuthPageState extends State<AuthPage> {
 
             const SizedBox(height: 10),
 
-            // ✅ Kayıt Ol = Kod ile giriş ekranı (OTP/Magic Link)
+            // ✅ Kayıt Ol = Kod ile giriş
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: _loading ? null : _goMagicLink,
+                onPressed: _loading ? null : _goCodeLogin,
                 child: const Text('Kayıt Ol'),
               ),
             ),

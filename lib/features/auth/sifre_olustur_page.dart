@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SifreOlusturPage extends StatefulWidget {
-  final Future<void> Function()? onPasswordCreated;
-
-  const SifreOlusturPage({super.key, this.onPasswordCreated});
+  const SifreOlusturPage({super.key});
 
   @override
   State<SifreOlusturPage> createState() => _SifreOlusturPageState();
@@ -39,7 +37,6 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
     return reg.hasMatch(s);
   }
 
-  // ✅ güçlü şifre: 8+ / büyük / küçük / rakam / özel
   String? _validateStrongPassword(String p) {
     if (p.length < 8) return 'En az 8 karakter olmalı';
     if (!RegExp(r'[A-Z]').hasMatch(p)) return 'En az 1 BÜYÜK harf olmalı';
@@ -67,15 +64,16 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
     try {
       final sb = Supabase.instance.client;
       final user = sb.auth.currentUser;
+
       if (user == null) {
-        _snack('Oturum bulunamadı. Lütfen tekrar giriş yap.');
+        _snack('Oturum bulunamadı. Tekrar giriş yap.');
         return;
       }
 
-      // 1) Auth şifre set
+      // ✅ 1) Auth şifre set
       await sb.auth.updateUser(UserAttributes(password: p1));
 
-      // 2) profiles.has_password = true
+      // ✅ 2) profiles.has_password = true
       await sb
           .from('profiles')
           .update({
@@ -85,14 +83,11 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
           .eq('id', user.id);
 
       if (!mounted) return;
+
       _snack('Şifre oluşturuldu ✅');
 
-      await widget.onPasswordCreated?.call();
-
-      // ✅ Nereden açarsan aç: geri dönmek istersen
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context, true);
-      }
+      // 🔥 GARANTİ ÇIKIŞ → AUTHGATE → HOME
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     } catch (e) {
       if (!mounted) return;
       _snack('Şifre oluşturma hatası: $e');
@@ -125,7 +120,6 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
     final hasDigit = RegExp(r'\d').hasMatch(p);
     final hasSpec = _hasSpecial(p);
 
-    // ✅ EN GARANTİ: Scaffold + Material burada
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -140,11 +134,9 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
             ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
               children: [
-                const SizedBox(height: 4),
                 const Text(
                   'Bundan sonra email + şifre ile gireceksin.\n'
-                  'Şifreni unutursan “Şifremi unuttum” ile mailden sıfırlarsın.',
-                  textAlign: TextAlign.left,
+                  'Şifreni unutursan “Şifremi unuttum” ile mailden kod alırsın.',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),
@@ -195,13 +187,12 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
                     _ruleRow(hasUpper, '1 büyük harf (A-Z)'),
                     _ruleRow(hasLower, '1 küçük harf (a-z)'),
                     _ruleRow(hasDigit, '1 rakam (0-9)'),
-                    _ruleRow(hasSpec, '1 özel karakter (!@#...)'),
+                    _ruleRow(hasSpec, '1 özel karakter'),
                   ],
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 SizedBox(
-                  width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
@@ -217,7 +208,6 @@ class _SifreOlusturPageState extends State<SifreOlusturPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
               ],
             ),
 

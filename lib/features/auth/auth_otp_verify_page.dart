@@ -3,10 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'sifre_olustur_page.dart';
+
 class AuthOtpVerifyPage extends StatefulWidget {
   final String email;
+  final bool isForgotPassword;
 
-  const AuthOtpVerifyPage({super.key, required this.email});
+  const AuthOtpVerifyPage({
+    super.key,
+    required this.email,
+    this.isForgotPassword = false,
+  });
 
   @override
   State<AuthOtpVerifyPage> createState() => _AuthOtpVerifyPageState();
@@ -56,6 +63,7 @@ class _AuthOtpVerifyPageState extends State<AuthOtpVerifyPage> {
     super.dispose();
   }
 
+  // ✅ KOD DOĞRULA
   Future<void> _verify() async {
     final token = _codeCtrl.text.trim();
 
@@ -74,8 +82,16 @@ class _AuthOtpVerifyPageState extends State<AuthOtpVerifyPage> {
 
       if (!mounted) return;
 
+      // 🔥 ŞİFREMİ UNUTTUM → ŞİFRE OLUŞTUR SAYFASINA
+      if (widget.isForgotPassword) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const SifreOlusturPage()),
+        );
+        return;
+      }
+
+      // ✅ NORMAL KOD GİRİŞ / KAYIT → AUTHGATE DEVAM ETSİN
       _snack('Giriş başarılı ✅');
-      // ✅ AuthGate session'ı yakalar ve yönlendirir
       Navigator.popUntil(context, (route) => route.isFirst);
     } on AuthException catch (e) {
       _snack(e.message);
@@ -86,6 +102,7 @@ class _AuthOtpVerifyPageState extends State<AuthOtpVerifyPage> {
     }
   }
 
+  // ✅ KOD TEKRAR GÖNDER
   Future<void> _resendCode() async {
     if (_secondsLeft > 0) return;
 
@@ -93,7 +110,7 @@ class _AuthOtpVerifyPageState extends State<AuthOtpVerifyPage> {
     try {
       await Supabase.instance.client.auth.signInWithOtp(
         email: widget.email,
-        shouldCreateUser: true,
+        shouldCreateUser: !widget.isForgotPassword,
       );
 
       if (!mounted) return;
@@ -156,7 +173,6 @@ class _AuthOtpVerifyPageState extends State<AuthOtpVerifyPage> {
             ),
 
             const SizedBox(height: 12),
-
             Row(
               children: [
                 Expanded(

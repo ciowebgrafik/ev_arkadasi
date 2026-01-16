@@ -4,15 +4,28 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_otp_verify_page.dart';
 
 class AuthOtpRequestPage extends StatefulWidget {
-  const AuthOtpRequestPage({super.key});
+  final String? initialEmail;
+  final bool isForgotPassword;
+
+  const AuthOtpRequestPage({
+    super.key,
+    this.initialEmail,
+    this.isForgotPassword = false,
+  });
 
   @override
   State<AuthOtpRequestPage> createState() => _AuthOtpRequestPageState();
 }
 
 class _AuthOtpRequestPageState extends State<AuthOtpRequestPage> {
-  final _emailCtrl = TextEditingController();
+  late final TextEditingController _emailCtrl;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailCtrl = TextEditingController(text: widget.initialEmail ?? '');
+  }
 
   @override
   void dispose() {
@@ -37,16 +50,22 @@ class _AuthOtpRequestPageState extends State<AuthOtpRequestPage> {
     try {
       await Supabase.instance.client.auth.signInWithOtp(
         email: email,
-        shouldCreateUser: true, // ✅ kayıt için
+        // ✅ Kayıt ise true, şifre unuttum / kodla giriş ise false
+        shouldCreateUser: !widget.isForgotPassword,
       );
 
       if (!mounted) return;
 
-      _snack('Kod / link mailine gönderildi ✅');
+      _snack('Kod mailine gönderildi ✅');
 
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => AuthOtpVerifyPage(email: email)),
+        MaterialPageRoute(
+          builder: (_) => AuthOtpVerifyPage(
+            email: email,
+            isForgotPassword: widget.isForgotPassword,
+          ),
+        ),
       );
     } on AuthException catch (e) {
       _snack(e.message);
@@ -59,22 +78,23 @@ class _AuthOtpRequestPageState extends State<AuthOtpRequestPage> {
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.isForgotPassword ? 'Şifre Kurtarma' : 'Kod ile Giriş';
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Kayıt Ol')),
+      appBar: AppBar(title: Text(title)),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 12),
-            Text('Kayıt Ol', style: Theme.of(context).textTheme.headlineSmall),
+            Text(title, style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 6),
             Text(
-              'Emailini yaz, sana giriş/kayıt için bir kod göndereceğiz.',
+              'Emailini yaz, sana 6 haneli kod göndereceğiz.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
-
             TextField(
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
@@ -83,7 +103,6 @@ class _AuthOtpRequestPageState extends State<AuthOtpRequestPage> {
                 border: OutlineInputBorder(),
               ),
             ),
-
             const SizedBox(height: 12),
             SizedBox(
               height: 48,
@@ -91,12 +110,6 @@ class _AuthOtpRequestPageState extends State<AuthOtpRequestPage> {
                 onPressed: _loading ? null : _sendCode,
                 child: Text(_loading ? 'Gönderiliyor...' : 'Kod Gönder'),
               ),
-            ),
-
-            const SizedBox(height: 10),
-            const Text(
-              'Mailine kod gelir (genelde 6 haneli). Kod gelmezse spam/junk klasörünü kontrol et.',
-              textAlign: TextAlign.center,
             ),
           ],
         ),

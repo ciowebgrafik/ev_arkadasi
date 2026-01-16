@@ -29,7 +29,8 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  Future<void> _login() async {
+  // ✅ NORMAL ŞİFRE İLE GİRİŞ
+  Future<void> _loginWithPassword() async {
     final email = _emailCtrl.text.trim();
     final pass = _passCtrl.text;
 
@@ -44,13 +45,13 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
 
     setState(() => _loading = true);
     try {
-      // ⚠️ Bu şu an giriş değil, reset linki gönderiyor (mevcut davranışını bozmadım)
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        email,
-        redirectTo: 'evarkadasi://reset-password',
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: pass,
       );
-
-      _snack('Şifre sıfırlama linki gönderildi ✅');
+      if (!mounted) return;
+      _snack('Giriş başarılı ✅');
+      Navigator.popUntil(context, (r) => r.isFirst); // AuthGate devam eder
     } on AuthException catch (e) {
       _snack(e.message);
     } catch (e) {
@@ -60,35 +61,46 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
     }
   }
 
-  Future<void> _forgotPassword() async {
-    final email = _emailCtrl.text.trim();
+  // ✅ KAYIT OL → KOD GÖNDER
+  void _goRegisterWithCode() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AuthOtpRequestPage(isForgotPassword: false),
+      ),
+    );
+  }
 
+  // ✅ KOD İLE NORMAL GİRİŞ
+  void _goCodeLogin() {
+    final email = _emailCtrl.text.trim();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AuthOtpRequestPage(
+          initialEmail: email.isNotEmpty ? email : null,
+          isForgotPassword: false,
+        ),
+      ),
+    );
+  }
+
+  // 🔥 ŞİFREMİ UNUTTUM → SADECE KOD → ŞİFRE OLUŞTUR
+  void _forgotPasswordAsCode() {
+    final email = _emailCtrl.text.trim();
     if (email.isEmpty || !email.contains('@')) {
       _snack('Şifremi unuttum için email gir.');
       return;
     }
 
-    setState(() => _loading = true);
-    try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        email,
-        redirectTo: 'evarkadasi://reset-password',
-      );
-
-      _snack('Şifre yenileme linki mailine gönderildi ✅');
-    } on AuthException catch (e) {
-      _snack(e.message);
-    } catch (e) {
-      _snack('Link gönderilemedi: $e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _goRegisterWithCode() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const AuthOtpRequestPage()),
+      MaterialPageRoute(
+        builder: (_) => AuthOtpRequestPage(
+          initialEmail: email,
+          isForgotPassword: true, // 🔥 KRİTİK
+        ),
+      ),
     );
   }
 
@@ -105,6 +117,7 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
               const SizedBox(height: 12),
               Text('Giriş', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 16),
+
               TextField(
                 controller: _emailCtrl,
                 keyboardType: TextInputType.emailAddress,
@@ -114,6 +127,7 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
                 ),
               ),
               const SizedBox(height: 12),
+
               TextField(
                 controller: _passCtrl,
                 obscureText: !_showPass,
@@ -129,25 +143,36 @@ class _AuthPasswordLoginPageState extends State<AuthPasswordLoginPage> {
                 ),
               ),
               const SizedBox(height: 8),
+
               Row(
                 children: [
                   TextButton(
-                    onPressed: _loading ? null : _forgotPassword,
+                    onPressed: _loading ? null : _forgotPasswordAsCode,
                     child: const Text('Şifremi unuttum'),
                   ),
                   const Spacer(),
                   TextButton(
-                    onPressed: _loading ? null : _goRegisterWithCode,
-                    child: const Text('Kayıt Ol'),
+                    onPressed: _loading ? null : _goCodeLogin,
+                    child: const Text('Kod ile giriş'),
                   ),
                 ],
               ),
+
               const SizedBox(height: 8),
               SizedBox(
                 height: 48,
                 child: FilledButton(
-                  onPressed: _loading ? null : _login,
+                  onPressed: _loading ? null : _loginWithPassword,
                   child: Text(_loading ? 'İşleniyor...' : 'Giriş Yap'),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: _loading ? null : _goRegisterWithCode,
+                  child: const Text('Kayıt Ol'),
                 ),
               ),
             ],

@@ -26,37 +26,29 @@ class _AuthGateState extends State<AuthGate> {
 
   StreamSubscription<AuthState>? _sub;
 
+  // ✅ aynı anda 2 kere sayfa açılmasını engeller
+  bool _navigating = false;
+
   @override
   void initState() {
     super.initState();
 
-    // ✅ Auth eventlerini dinle
     _sub = supabase.auth.onAuthStateChange.listen((data) async {
       final event = data.event;
       final session = data.session;
 
-      // ✅ Password recovery linkinden geldiyse → şifre oluştur
+      // ✅ Password recovery linkinden geldiyse → şifre oluştur (eski akış)
       if (event == AuthChangeEvent.passwordRecovery && session != null) {
         if (!mounted) return;
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => SifreOlusturPage(
-              onPasswordCreated: () async {
-                await _checkProfile();
-              },
-            ),
-          ),
-          (route) => false,
-        );
+        await _openPasswordCreateFlow(forceOpen: true);
         return;
       }
 
-      // Diğer durumlarda normal kontrol
       await _checkProfile();
+      await _maybeNavigate();
     });
 
-    // İlk açılışta kontrol
-    _checkProfile();
+    _checkProfile().then((_) => _maybeNavigate());
   }
 
   @override
@@ -77,7 +69,9 @@ class _AuthGateState extends State<AuthGate> {
       await supabase.auth.signOut();
     } catch (_) {}
     if (!mounted) return;
-    setState(_resetLocalState);
+
+    // ✅ FIX: setState callback
+    setState(() => _resetLocalState());
   }
 
   Future<void> _checkProfile() async {
@@ -95,7 +89,9 @@ class _AuthGateState extends State<AuthGate> {
       // ✅ Oturum yoksa -> AuthPage
       if (user == null || session == null) {
         if (!mounted) return;
-        setState(_resetLocalState);
+
+        // ✅ FIX: setState callback
+        setState(() => _resetLocalState());
         return;
       }
 
@@ -113,7 +109,6 @@ class _AuthGateState extends State<AuthGate> {
         _loading = false;
       });
     } on AuthException catch (e) {
-      // ✅ Bazen cihazda session kalır ama Supabase'de user yoktur
       if (e.statusCode == 403 || e.code == 'user_not_found') {
         await _forceSignOutAndGoAuth();
         return;
@@ -129,6 +124,41 @@ class _AuthGateState extends State<AuthGate> {
         _error = 'Profil kontrol hatası: $e';
         _loading = false;
       });
+    }
+  }
+
+  // ✅ Şifre oluştur ekranını güvenli şekilde aç
+  Future<void> _openPasswordCreateFlow({bool forceOpen = false}) async {
+    if (!mounted) return;
+    if (_navigating) return;
+
+    final session = supabase.auth.currentSession;
+    final user = supabase.auth.currentUser;
+    if (!forceOpen && (session == null || user == null)) return;
+
+    _navigating = true;
+    try {
+      final result = await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const SifreOlusturPage()));
+
+      // result true geldiyse (Navigator.pop(true)) → profili tekrar kontrol et
+      if (!mounted) return;
+      if (result == true) {
+        await _checkProfile();
+      }
+    } finally {
+      _navigating = false;
+    }
+  }
+
+  // ✅ Profil yoksa / şifre yoksa otomatik doğru sayfaya git
+  Future<void> _maybeNavigate() async {
+    if (!mounted) return;
+    if (_loading || _error != null) return;
+
+    if (_hasProfile && !_hasPassword) {
+      await _openPasswordCreateFlow();
     }
   }
 
@@ -163,7 +193,10 @@ class _AuthGateState extends State<AuthGate> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ElevatedButton(
-                      onPressed: _checkProfile,
+                      onPressed: () async {
+                        await _checkProfile();
+                        await _maybeNavigate();
+                      },
                       child: const Text('Tekrar dene'),
                     ),
                     const SizedBox(width: 12),
@@ -180,22 +213,19 @@ class _AuthGateState extends State<AuthGate> {
       );
     }
 
-    // ✅ 4) Profil yok -> Profil oluştur
+    // ✅ 4) Profil yok -> Profil oluştur (return ile)
     if (!_hasProfile) {
       return ProfilOlusturSayfasi(
         onProfileSaved: () async {
           await _checkProfile();
+          await _maybeNavigate();
         },
       );
     }
 
-    // ✅ 5) Profil var ama şifre yok -> Şifre oluştur
+    // ✅ 5) Profil var ama şifre yoksa → _maybeNavigate push yapar, burada beklet
     if (!_hasPassword) {
-      return SifreOlusturPage(
-        onPasswordCreated: () async {
-          await _checkProfile();
-        },
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     // ✅ 6) Her şey tamam -> Home
