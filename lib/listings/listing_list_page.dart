@@ -550,7 +550,12 @@ class _ListingListPageState extends State<ListingListPage> {
       query = query.or(orParts.join(','));
     }
 
-    final res = await query.order('created_at', ascending: false);
+    // ✅✅✅ DOPING SIRALAMA DÜZELTME:
+    // Boost'lu ilanlar (boost_until dolu + ileri tarih) üstte gelsin,
+    // sonra created_at ile yeniler kendi içinde üste gelsin.
+    final res = await query
+        .order('boost_until', ascending: false, nullsFirst: false)
+        .order('created_at', ascending: false);
 
     return (res as List)
         .map((e) => Map<String, dynamic>.from(e as Map))
@@ -1747,13 +1752,7 @@ class _ListingListPageState extends State<ListingListPage> {
       ),
 
       // ✅ En stabil yöntem: banner’ı bottomNavigationBar’a sabitle
-      bottomNavigationBar: const SafeArea(
-        top: false,
-        child: AdBannerBox(
-          // istersen padding ver:
-          // padding: EdgeInsets.symmetric(vertical: 6),
-        ),
-      ),
+      bottomNavigationBar: const SafeArea(top: false, child: AdBannerBox()),
 
       body: Column(
         children: [

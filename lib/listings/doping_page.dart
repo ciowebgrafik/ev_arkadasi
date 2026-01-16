@@ -1,4 +1,3 @@
-// ✅ APP UI (senin projedeki doğru yol)
 import 'package:ev_arkadasi/core/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,9 +13,7 @@ class DopingPage extends StatefulWidget {
 }
 
 class _DopingPageState extends State<DopingPage> {
-  // ✅ AppUI’dan renk
   static const Color kTurkuaz = AppUI.kTurkuaz;
-
   final SupabaseClient _sb = Supabase.instance.client;
 
   bool _loading = true;
@@ -24,15 +21,12 @@ class _DopingPageState extends State<DopingPage> {
   String? _error;
 
   Map<String, dynamic> _listing = {};
-  Map<String, dynamic> _details = {};
 
-  // ✅ Paket süreleri
-  static const int _daysFeatured = 7; // Öne çıkar
-  static const int _daysUrgent = 15; // Acil
-  static const int _daysGold = 30; // Altın ilan
+  static const int _daysFeatured = 7;
+  static const int _daysUrgent = 15;
+  static const int _daysGold = 30;
 
-  // Seçili plan
-  String _selectedPlan = 'featured'; // default
+  String _selectedPlan = 'featured';
 
   @override
   void initState() {
@@ -40,9 +34,7 @@ class _DopingPageState extends State<DopingPage> {
     _loadListing();
   }
 
-  // ------------------ LOAD LISTING ------------------
   Future<void> _loadListing() async {
-    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -51,7 +43,7 @@ class _DopingPageState extends State<DopingPage> {
     try {
       final res = await _sb
           .from('listings')
-          .select('id,title,details,status,owner_id')
+          .select('id,title,status,owner_id,boost_type,boost_until')
           .eq('id', widget.listingId)
           .maybeSingle();
 
@@ -59,46 +51,32 @@ class _DopingPageState extends State<DopingPage> {
 
       _listing = Map<String, dynamic>.from(res as Map);
 
-      final d = _listing['details'];
-      if (d is Map<String, dynamic>) {
-        _details = d;
-      } else if (d is Map) {
-        _details = d.map((k, v) => MapEntry('$k', v));
-      } else {
-        _details = {};
-      }
-
-      // mevcut plan varsa seçiliye çek
-      final cur = (_details['boost_plan'] ?? '')
+      final curType = (_listing['boost_type'] ?? '')
           .toString()
           .toLowerCase()
           .trim();
-      if (cur == 'gold' || cur == 'featured' || cur == 'urgent') {
-        _selectedPlan = cur;
+      if (curType == 'gold' || curType == 'featured' || curType == 'urgent') {
+        _selectedPlan = curType;
       }
     } catch (e) {
-      _error = '$e';
+      _error = e.toString();
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  // ------------------ HELPERS ------------------
-  DateTime? _parseDt(String? s) {
-    if (s == null) return null;
-    final x = s.trim();
-    if (x.isEmpty) return null;
-    try {
-      return DateTime.parse(x);
-    } catch (_) {
-      return null;
-    }
+  DateTime? _parseDt(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    return DateTime.tryParse(s);
   }
 
   bool _isBoostActive() {
-    final end = _parseDt((_details['boost_end'] ?? '').toString());
-    if (end == null) return false;
-    return end.isAfter(DateTime.now());
+    final until = _parseDt(_listing['boost_until']);
+    if (until == null) return false;
+    return until.isAfter(DateTime.now());
   }
 
   String _planTitle(String plan) {
@@ -127,7 +105,6 @@ class _DopingPageState extends State<DopingPage> {
     }
   }
 
-  // ALTIN = sarı, ACİL = mavi, ÖNE ÇIKAR = gri
   Color _planStarColor(String plan) {
     switch (plan) {
       case 'gold':
@@ -147,63 +124,45 @@ class _DopingPageState extends State<DopingPage> {
     return '${two(dt.day)}.${two(dt.month)}.${dt.year} ${two(dt.hour)}:${two(dt.minute)}';
   }
 
-  // ✅ Satın alma başarılı olunca DB’ye uygula
-  Future<void> _applyBoostToDb(String plan) async {
+  Future<void> _applyBoostRpc(String plan) async {
     final user = _sb.auth.currentUser;
     if (user == null) throw Exception('Giriş yapılmamış.');
 
-    final now = DateTime.now();
+    final days = _planDays(plan);
+    if (days <= 0) throw Exception('Geçersiz paket.');
 
-    // ✅ Mevcut kolon değerini çek (uzatma mantığı için)
-    final cur = await _sb
-        .from('listings')
-        .select('boost_until, boost_type, owner_id')
-        .eq('id', widget.listingId)
-        .maybeSingle();
+    final res = await _sb.rpc(
+      'apply_listing_boost',
+      params: {
+        'p_listing_id': widget.listingId, // ✅ artık text
+        'p_boost_type': plan,
+        'p_days': days,
+      },
+    );
 
-    if (cur == null) throw Exception('İlan bulunamadı.');
-
-    final ownerId = (cur['owner_id'] ?? '').toString();
-    if (ownerId.isNotEmpty && ownerId != user.id) {
-      throw Exception('Bu ilan sana ait değil.');
+    if (res is List && res.isNotEmpty) {
+      final row = Map<String, dynamic>.from(res.first as Map);
+      _listing['boost_type'] = row['boost_type'];
+      _listing['boost_until'] = row['boost_until'];
+      return;
     }
 
-    DateTime? currentUntil;
-    try {
-      final s = (cur['boost_until'] ?? '').toString();
-      if (s.isNotEmpty) currentUntil = DateTime.tryParse(s);
-    } catch (_) {}
+    if (res is Map) {
+      final row = Map<String, dynamic>.from(res);
+      _listing['boost_type'] = row['boost_type'];
+      _listing['boost_until'] = row['boost_until'];
+      return;
+    }
 
-    final base = (currentUntil != null && currentUntil.isAfter(now))
-        ? currentUntil
-        : now;
-
-    final end = base.add(Duration(days: _planDays(plan)));
-
-    // ✅ ÖNEMLİ: plan değerleri listing_list_page ile aynı olmalı
-    // gold / urgent / featured
-    final boostType = plan;
-
-    // ✅ TABLO KOLONLARINI GÜNCELLE
-    await _sb
-        .from('listings')
-        .update({'boost_type': boostType, 'boost_until': end.toIso8601String()})
-        .eq('id', widget.listingId);
-
-    // (İstersen UI bilgisi için details içine de yazabilirsin ama şart değil)
-    _details = Map<String, dynamic>.from(_details);
-    _details['boost_plan'] = plan;
-    _details['boost_end'] = end.toIso8601String();
+    await _loadListing();
   }
 
-  // ------------------ UI ACTION ------------------
   Future<void> _onBuyPressed() async {
     if (_buying) return;
 
-    if (!mounted) return;
     setState(() => _buying = true);
     try {
-      await _applyBoostToDb(_selectedPlan);
+      await _applyBoostRpc(_selectedPlan);
 
       if (!mounted) return;
 
@@ -222,7 +181,6 @@ class _DopingPageState extends State<DopingPage> {
     }
   }
 
-  // ------------------ WIDGETS ------------------
   Widget _planCard({
     required String plan,
     required String desc,
@@ -308,12 +266,12 @@ class _DopingPageState extends State<DopingPage> {
 
   @override
   Widget build(BuildContext context) {
-    final end = _parseDt((_details['boost_end'] ?? '').toString());
     final active = _isBoostActive();
-    final curPlan = (_details['boost_plan'] ?? '')
+    final curPlan = (_listing['boost_type'] ?? '')
         .toString()
         .toLowerCase()
         .trim();
+    final until = _parseDt(_listing['boost_until']);
 
     return Scaffold(
       appBar: AppBar(
@@ -343,8 +301,6 @@ class _DopingPageState extends State<DopingPage> {
                   ),
                 ),
                 SizedBox(height: AppUI.gap(context, 10)),
-
-                // ✅ Aktif info
                 Container(
                   padding: EdgeInsets.all(AppUI.gap(context, 12)),
                   decoration: BoxDecoration(
@@ -368,7 +324,7 @@ class _DopingPageState extends State<DopingPage> {
                       Expanded(
                         child: Text(
                           active
-                              ? 'Aktif: ${_planTitle(curPlan)} • Bitiş: ${_fmtDate(end)}'
+                              ? 'Aktif: ${_planTitle(curPlan)} • Bitiş: ${_fmtDate(until)}'
                               : 'Şu an aktif doping yok.',
                           style: TextStyle(
                             color: Colors.grey.shade800,
@@ -380,7 +336,6 @@ class _DopingPageState extends State<DopingPage> {
                     ],
                   ),
                 ),
-
                 SizedBox(height: AppUI.gap(context, 14)),
                 Text(
                   'Paket seç',
@@ -390,7 +345,6 @@ class _DopingPageState extends State<DopingPage> {
                   ),
                 ),
                 SizedBox(height: AppUI.gap(context, 10)),
-
                 _planCard(
                   plan: 'featured',
                   desc: 'İlanı listede öne taşır (7 gün).',
@@ -408,9 +362,7 @@ class _DopingPageState extends State<DopingPage> {
                   desc: 'En üst paket (30 gün).',
                   context: context,
                 ),
-
                 SizedBox(height: AppUI.gap(context, 18)),
-
                 SizedBox(
                   height: AppUI.gap(context, 50),
                   child: ElevatedButton.icon(
@@ -440,9 +392,7 @@ class _DopingPageState extends State<DopingPage> {
                     ),
                   ),
                 ),
-
                 SizedBox(height: AppUI.gap(context, 10)),
-
                 Text(
                   'Seçili: ${_planTitle(_selectedPlan)} • Süre: ${_planDays(_selectedPlan)} gün',
                   style: TextStyle(
